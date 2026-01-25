@@ -290,6 +290,7 @@ def sync_links(
             # and the current name doesn't already start with the newsletter title (already synced)
             name_needs_update = (
                 nl_title
+                and link_name
                 and link_name != nl_title
                 and not link_name.startswith(nl_title)
             )
