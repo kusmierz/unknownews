@@ -127,29 +127,31 @@ def load_newsletter_index(jsonl_path: str) -> tuple[dict[str, dict], dict[str, d
 
 
 def fetch_collection_links(base_url: str, collection_id: int, token: str) -> list[dict]:
-    """Fetch all links from a Linkwarden collection with pagination."""
+    """Fetch all links from a Linkwarden collection using search API with pagination."""
     headers = {"Authorization": f"Bearer {token}"}
     all_links = []
-    cursor = 0
-    page_size = 50
+    cursor = None
 
     while True:
-        url = f"{base_url}/api/v1/links?collectionId={collection_id}&sort=0&cursor={cursor}"
+        url = f"{base_url}/api/v1/search?collectionId={collection_id}"
+        if cursor:
+            url += f"&cursor={cursor}"
         response = requests.get(url, headers=headers)
         response.raise_for_status()
-        data = response.json()
+        result = response.json()
 
-        links = data.get("response", [])
+        data = result.get("data", {})
+        links = data.get("links", [])
         if not links:
             break
 
         all_links.extend(links)
 
-        # If we got fewer links than page size, we've reached the end
-        if len(links) < page_size:
+        # Use nextCursor for pagination
+        next_cursor = data.get("nextCursor")
+        if not next_cursor:
             break
-
-        cursor += len(links)
+        cursor = next_cursor
 
     return all_links
 
