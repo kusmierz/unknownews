@@ -1,5 +1,7 @@
 import json
 import re
+import os
+from dotenv import load_dotenv
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -185,10 +187,15 @@ def scrape_newsletter(url: str) -> tuple[dict, list[dict]]:
         if title_elem and link_elem:
             # Remove number prefix like "1. ", "12. " etc.
             link_title = re.sub(r"^\d+\.\s*", "", title_elem.get_text(separator=" ", strip=True))
+            link_href = link_elem.get("href", "")
+            if link_href.startswith("https://uw7.org/"):
+                print(f"Converting to premium URL: {link_href}...")
+                link_href = get_premium_url(link_href)
+                print(f"    -> {link_href}")
 
             links.append({
                 "title": link_title,
-                "link": link_elem.get("href"),
+                "link": link_href,
                 "description": desc_text
             })
 
@@ -243,6 +250,26 @@ def append_newsletter(newsletter: dict, output_dir: str) -> None:
     path = Path(output_dir) / "newsletters.jsonl"
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(newsletter, ensure_ascii=False) + "\n")
+
+
+def get_premium_url(url: str) -> str:
+    """Convert a newsletter URL to its premium version if applicable."""
+    password = os.environ.get("UNKNOW_NEWS_PASSWORD", "")
+    data = f"kodx={password}"
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "curl/8.0.0",
+        "Accept": "*/*",
+    }
+    response = requests.post(
+        url,
+        headers=headers,
+        data=data,
+        allow_redirects=False,
+        timeout=5,
+    )
+
+    return response.headers.get("Location")
 
 
 def crawl_newsletters(
@@ -315,6 +342,7 @@ def crawl_newsletters(
 if __name__ == "__main__":
     import argparse
 
+    load_dotenv()
     parser = argparse.ArgumentParser(description="Crawl unknownews newsletters")
     parser.add_argument("url", help="Starting newsletter URL")
     parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum total newsletters (default: 10)")
