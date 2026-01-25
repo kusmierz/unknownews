@@ -279,6 +279,7 @@ def sync_links(
             nl_title = nl_data.get("title", "")
             nl_description = nl_data.get("description", "")
             nl_date = nl_data.get("date", "")
+            nl_link = nl_data.get("original_url", "")
 
             # Prepare tags
             tags_to_add = ["unknow"]
@@ -306,7 +307,7 @@ def sync_links(
             # Prepare new description (append to existing)
             if description_needs_update:
                 if existing_desc:
-                    new_description = f"{existing_desc}\n\n---\n\n{nl_description}"
+                    new_description = f"{nl_description}\n\n---\n{existing_desc}"
                 else:
                     new_description = nl_description
             else:
@@ -327,7 +328,10 @@ def sync_links(
             if name_needs_update:
                 console.print("    [cyan]name:[/cyan]")
                 show_diff(link_name, new_name)
-            if url_needs_update or match_type == "fuzzy":
+            if match_type == "fuzzy":
+                console.print("    [cyan]matched url:[/cyan]")
+                show_diff(link_url, nl_link)
+            if url_needs_update:
                 console.print("    [cyan]url:[/cyan]")
                 show_diff(link_url, new_url)
             if new_tags:
