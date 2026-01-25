@@ -14,7 +14,7 @@ Scraper and crawler for [unknownews](https://unknow.news) newsletter (mrugalski.
 ## Requirements
 
 - Python 3.10+
-- Dependencies: `requests`, `beautifulsoup4`, `python-dotenv`
+- Dependencies: `requests`, `beautifulsoup4`, `python-dotenv`, `rich`
 
 ## Setup
 
@@ -133,12 +133,18 @@ python linkwarden_sync.py
 # Sync to specific collection
 python linkwarden_sync.py --collection 14
 
+# Limit number of updates
+python linkwarden_sync.py --limit 10
+
 # Use custom JSONL path
 python linkwarden_sync.py --jsonl data/newsletters.jsonl
 ```
 
 ### What it does
 
-- Matches Linkwarden bookmark URLs against newsletter links
-- Adds "unknow" tag and date tag (e.g., "2024-12-20") to matched links
-- Appends newsletter description to existing bookmark description
+- **URL matching**: Exact match first, then fuzzy match (by domain+path, ignoring query params)
+- **URL normalization**: Removes tracking params (`utm_*`, `fbclid`, etc.) and fragments (`#`)
+- **Name update**: Sets link name to newsletter title with original in brackets
+- **Tags**: Adds "unknow" tag and date tag (e.g., "2024-12-20")
+- **Description**: Appends newsletter description to existing bookmark description
+- **Colored diff output**: Shows changes with highlighted differences using `rich`

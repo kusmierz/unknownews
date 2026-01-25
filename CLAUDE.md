@@ -17,9 +17,10 @@ python scraper.py <url> [-n LIMIT]
 python scraper.py https://mrugalski.pl/nl/wu/u8d1L2kQOHGVezsjqUWH0g -n 50
 
 # Sync to Linkwarden
-python linkwarden_sync.py --dry-run     # preview
-python linkwarden_sync.py               # sync to collection 14
-python linkwarden_sync.py --collection 14
+python linkwarden_sync.py --dry-run          # preview changes
+python linkwarden_sync.py                    # sync to collection 14
+python linkwarden_sync.py --collection 14    # specify collection
+python linkwarden_sync.py --limit 5          # limit updates
 ```
 
 ## Architecture
@@ -37,14 +38,18 @@ Helper functions:
 - `append_newsletter(newsletter, output_dir)` - append to JSONL
 
 ### linkwarden_sync.py
-Syncs newsletter descriptions to Linkwarden bookmarks. Main functions:
+Syncs newsletter descriptions to Linkwarden bookmarks. Uses `rich` for colored diff output.
 
-- `load_newsletter_index(jsonl_path)` -> `dict[str, dict]` - URL to {description, date, title}
-- `fetch_collection_links(base_url, collection_id, token)` -> `list[dict]` - GET with pagination
-- `update_link(base_url, link_id, description, tags, token)` -> `bool` - PUT to update
-- `sync_links(base_url, collection_id, jsonl_path)` - main sync logic
+Main functions:
+- `load_newsletter_index(jsonl_path)` -> `(exact_index, fuzzy_index)` - builds two indexes for matching
+- `fetch_collection_links(base_url, collection_id, token)` -> `list[dict]` - uses `/api/v1/search` with pagination
+- `update_link(base_url, link, new_name, new_url, new_description, new_tags, token)` -> `bool` - PUT to update
+- `sync_links(base_url, collection_id, jsonl_path, dry_run, limit)` - main sync logic
 
-Helper: `normalize_url(url)` - lowercase, strip trailing slash, http->https
+Helpers:
+- `normalize_url(url)` - removes fragments, tracking params (utm_*, fbclid, etc.), normalizes http->https
+- `get_url_path_key(url)` - extracts domain+path for fuzzy matching
+- `show_diff(old, new)` - displays inline diff with highlighted changes
 
 ## Output structure
 
@@ -85,15 +90,24 @@ data/
 
 ## Linkwarden API
 
-Fetch links: `GET /api/v1/links?collectionId=X&sort=0&cursor=N`
-Update link: `PUT /api/v1/links` with body:
-```json
+Search links (paginated):
+```
+GET /api/v1/search?collectionId=14&cursor=<lastId>
+Response: { "data": { "links": [...], "nextCursor": 123 } }
+```
+
+Update link:
+```
+PUT /api/v1/links/{id}
 {
-  "links": [123],
-  "removePreviousTags": false,
-  "newData": {
-    "description": "...",
-    "tags": [{"name": "unknow"}, {"name": "2024-12-20"}]
-  }
+  "id": 123,
+  "name": "New title [Original title]",
+  "url": "https://normalized.url/path",
+  "description": "...",
+  "collectionId": 14,
+  "collection": { ... },
+  "tags": [{"name": "unknow"}, {"name": "2024-12-20"}]
 }
 ```
+
+Note: `/api/v1/links` GET is deprecated, use `/api/v1/search` instead.
