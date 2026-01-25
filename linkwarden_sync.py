@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import difflib
 import json
 import os
 import sys
@@ -16,26 +17,35 @@ from urllib.parse import urlparse
 
 import requests
 from dotenv import load_dotenv
+from rich.console import Console
+from rich.text import Text
+
+console = Console()
 
 
-# ANSI color codes
-class Colors:
-    RED = "\033[91m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    BLUE = "\033[94m"
-    CYAN = "\033[96m"
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
+def show_diff(old: str, new: str, indent: str = "      ") -> None:
+    """Show diff with highlighted changes using rich."""
+    matcher = difflib.SequenceMatcher(None, old, new)
 
-    @classmethod
-    def disable(cls):
-        cls.RED = cls.GREEN = cls.YELLOW = cls.BLUE = cls.CYAN = cls.RESET = cls.BOLD = ""
+    old_text = Text()
+    old_text.append(f"{indent}- ", style="red")
+    new_text = Text()
+    new_text.append(f"{indent}+ ", style="green")
 
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            old_text.append(old[i1:i2])
+            new_text.append(new[j1:j2])
+        elif tag == "replace":
+            old_text.append(old[i1:i2], style="bold red on dark_red")
+            new_text.append(new[j1:j2], style="bold green on dark_green")
+        elif tag == "delete":
+            old_text.append(old[i1:i2], style="bold red on dark_red")
+        elif tag == "insert":
+            new_text.append(new[j1:j2], style="bold green on dark_green")
 
-# Disable colors if not a TTY
-if not sys.stdout.isatty():
-    Colors.disable()
+    console.print(old_text)
+    console.print(new_text)
 
 
 def get_url_path_key(url: str) -> str:
@@ -242,7 +252,7 @@ def sync_links(
 
     exact_count = sum(1 for m in matches if m["match_type"] == "exact")
     fuzzy_count = sum(1 for m in matches if m["match_type"] == "fuzzy")
-    print(f"\n{Colors.GREEN}Exact: {exact_count}{Colors.RESET} | {Colors.CYAN}Fuzzy: {fuzzy_count}{Colors.RESET} | {Colors.YELLOW}Unmatched: {len(unmatched_urls)}{Colors.RESET}")
+    console.print(f"\n[green]Exact: {exact_count}[/green] | [cyan]Fuzzy: {fuzzy_count}[/cyan] | [yellow]Unmatched: {len(unmatched_urls)}[/yellow]")
 
     if not matches:
         print("No matches found. Nothing to update.")
@@ -309,25 +319,23 @@ def sync_links(
             new_url = normalized_url if url_needs_update else link_url
 
             # Log the update
-            match_label = f" {Colors.CYAN}(fuzzy match){Colors.RESET}" if match_type == "fuzzy" else ""
-            print(f"  {Colors.BOLD}Link ID: {link_id}{Colors.RESET}{match_label}")
+            match_label = " [cyan](fuzzy match)[/cyan]" if match_type == "fuzzy" else ""
+            console.print(f"  [bold]Link ID: {link_id}[/bold]{match_label}")
             if name_needs_update:
-                print(f"    {Colors.CYAN}name:{Colors.RESET}")
-                print(f"      {Colors.RED}- {link_name}{Colors.RESET}")
-                print(f"      {Colors.GREEN}+ {new_name}{Colors.RESET}")
+                console.print("    [cyan]name:[/cyan]")
+                show_diff(link_name, new_name)
             if url_needs_update or match_type == "fuzzy":
-                print(f"    {Colors.CYAN}url:{Colors.RESET}")
-                print(f"      {Colors.RED}- {link_url}{Colors.RESET}")
-                print(f"      {Colors.GREEN}+ {new_url}{Colors.RESET}")
+                console.print("    [cyan]url:[/cyan]")
+                show_diff(link_url, new_url)
             if new_tags:
-                print(f"    {Colors.CYAN}tags:{Colors.RESET}")
+                console.print("    [cyan]tags:[/cyan]")
                 for tag in new_tags:
-                    print(f"      {Colors.GREEN}+ {tag}{Colors.RESET}")
+                    console.print(f"      [green]+ {tag}[/green]")
             if description_needs_update:
                 desc_preview = nl_description[:80] + "..." if len(nl_description) > 80 else nl_description
-                print(f"    {Colors.CYAN}description:{Colors.RESET}")
-                print(f"      {Colors.GREEN}+ \"{desc_preview}\"{Colors.RESET}")
-            print()
+                console.print("    [cyan]description:[/cyan]")
+                console.print(f"      [green]+ \"{desc_preview}\"[/green]")
+            console.print()
 
             # Perform update
             try:
@@ -343,23 +351,23 @@ def sync_links(
                 )
                 updated += 1
             except Exception as e:
-                print(f"    Error updating: {e}")
+                console.print(f"    [red]Error updating: {e}[/red]")
 
             # Check limit
             if limit > 0 and updated >= limit:
-                print(f"  Reached limit of {limit} updates, stopping.")
+                console.print(f"  Reached limit of {limit} updates, stopping.")
                 break
 
         # Summary
-        print(f"\n{Colors.BOLD}{'[DRY RUN] ' if dry_run else ''}Summary:{Colors.RESET}")
-        print(f"  {Colors.GREEN}Updated: {updated}{Colors.RESET}")
-        print(f"  {Colors.YELLOW}Skipped (already synced): {skipped}{Colors.RESET}")
+        console.print(f"\n[bold]{'[DRY RUN] ' if dry_run else ''}Summary:[/bold]")
+        console.print(f"  [green]Updated: {updated}[/green]")
+        console.print(f"  [yellow]Skipped (already synced): {skipped}[/yellow]")
 
     # Print unmatched URLs
     if unmatched_urls:
-        print(f"\n{Colors.BOLD}Unmatched Linkwarden URLs ({len(unmatched_urls)}):{Colors.RESET}")
+        console.print(f"\n[bold]Unmatched Linkwarden URLs ({len(unmatched_urls)}):[/bold]")
         for url in unmatched_urls:
-            print(f"  {Colors.YELLOW}{url}{Colors.RESET}")
+            console.print(f"  [yellow]{url}[/yellow]")
 
 
 def main():
