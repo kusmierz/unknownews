@@ -22,6 +22,59 @@ from rich.text import Text
 
 console = Console()
 
+# Tracking params to always strip from URLs
+TRACKING_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "ref", "source", "fbclid", "gclid", "mc_cid", "mc_eid", "si",
+}
+
+# Domain-specific params that identify the resource (for fuzzy matching)
+DOMAIN_ID_PARAMS = {
+    "youtube.com": {"v", "list"},
+    "www.youtube.com": {"v", "list"},
+    "youtu.be": set(),  # ID is in path
+    "vimeo.com": set(),  # ID is in path
+    "open.spotify.com": set(),  # ID is in path
+    "github.com": set(),  # ID is in path
+}
+
+# Generic ID-like params to preserve for unknown domains
+GENERIC_ID_PARAMS = {"v", "id", "p", "pid", "vid", "article", "story", "post"}
+
+
+def filter_query_params(query: str, keep_only: set[str] | None = None) -> str:
+    """Filter query string, removing tracking params.
+
+    Args:
+        query: The query string (without leading ?)
+        keep_only: If provided, only keep params in this set (in addition to removing tracking).
+                   If None, keep all non-tracking params.
+
+    Returns:
+        Filtered query string (without leading ?)
+    """
+    if not query:
+        return ""
+
+    filtered = []
+    for param in query.split("&"):
+        if "=" in param:
+            key = param.split("=")[0].lower()
+        else:
+            key = param.lower()
+
+        # Always skip tracking params
+        if key in TRACKING_PARAMS:
+            continue
+
+        # If whitelist provided, only keep params in it
+        if keep_only is not None and key not in keep_only:
+            continue
+
+        filtered.append(param)
+
+    return "&".join(filtered)
+
 
 def show_diff(old: str, new: str, indent: str = "      ") -> None:
     """Show diff with highlighted changes using rich."""
@@ -49,46 +102,49 @@ def show_diff(old: str, new: str, indent: str = "      ") -> None:
 
 
 def get_url_path_key(url: str) -> str:
-    """Extract just the domain and path for fuzzy matching (no protocol, no query, no fragment)."""
+    """Extract domain, path, and significant query params for fuzzy matching.
+
+    Preserves ID-like query parameters for sites that use them (YouTube, etc.)
+    while stripping tracking params and other noise.
+    """
     if not url:
         return ""
+
     parsed = urlparse(url.strip())
-    # Just netloc + path, lowercase, no trailing slash
-    key = f"{parsed.netloc}{parsed.path}".lower().rstrip("/")
-    return key
+    netloc = parsed.netloc.lower()
+    path = parsed.path.rstrip("/")
+
+    # Determine which params to keep based on domain
+    params_to_keep = DOMAIN_ID_PARAMS.get(netloc, GENERIC_ID_PARAMS)
+
+    # Filter query params (only keep ID-like ones)
+    filtered_query = filter_query_params(parsed.query, keep_only=params_to_keep)
+
+    # Build key: netloc + path + sorted significant params
+    key = f"{netloc}{path}"
+    if filtered_query:
+        # Sort params for consistent matching
+        sorted_params = sorted(filtered_query.lower().split("&"))
+        key += "?" + "&".join(sorted_params)
+
+    return key.lower()
 
 
 def normalize_url(url: str) -> str:
-    """Normalize URL for matching: lowercase, strip trailing slash, handle http/https, remove fragments and tracking params."""
+    """Normalize URL for matching: strip trailing slash, handle http/https, remove fragments and tracking params."""
     if not url:
         return ""
-    url = url.strip()
 
-    # Parse URL
-    parsed = urlparse(url)
+    parsed = urlparse(url.strip())
 
-    # Remove fragment (#)
-    # Remove tracking query params
-    tracking_params = {
-        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-        "ref", "source", "fbclid", "gclid", "mc_cid", "mc_eid",
-    }
-
-    if parsed.query:
-        params = parsed.query.split("&")
-        filtered = [p for p in params if p.split("=")[0].lower() not in tracking_params]
-        new_query = "&".join(filtered)
-    else:
-        new_query = ""
+    # Filter query params (remove tracking, keep everything else)
+    filtered_query = filter_query_params(parsed.query, keep_only=None)
 
     # Rebuild URL without fragment, with filtered query
-    normalized = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-    if new_query:
-        normalized += f"?{new_query}"
-
-    # Normalize http to https
-    if normalized.startswith("http://"):
-        normalized = "https://" + normalized[7:]
+    scheme = "https" if parsed.scheme in ("http", "https") else parsed.scheme
+    normalized = f"{scheme}://{parsed.netloc}{parsed.path}"
+    if filtered_query:
+        normalized += f"?{filtered_query}"
 
     return normalized
 
