@@ -252,6 +252,12 @@ def append_newsletter(newsletter: dict, output_dir: str) -> None:
         f.write(json.dumps(newsletter, ensure_ascii=False) + "\n")
 
 
+def get_latest_newsletter_url() -> str:
+    """Fetch the latest newsletter URL from unknow.news/last."""
+    response = requests.get("https://unknow.news/last", allow_redirects=True)
+    return response.url
+
+
 def get_premium_url(url: str) -> str:
     """Convert a newsletter URL to its premium version if applicable."""
     password = os.environ.get("UNKNOW_NEWS_PASSWORD", "")
@@ -344,9 +350,16 @@ if __name__ == "__main__":
 
     load_dotenv()
     parser = argparse.ArgumentParser(description="Crawl unknownews newsletters")
-    parser.add_argument("url", help="Starting newsletter URL")
+    parser.add_argument("url", nargs="?", help="Starting newsletter URL (default: latest from unknow.news)")
     parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum total newsletters (default: 10)")
     args = parser.parse_args()
 
-    count = crawl_newsletters(args.url, max_total=args.limit)
+    if args.url:
+        start_url = args.url
+    else:
+        print("Fetching latest newsletter URL...")
+        start_url = get_latest_newsletter_url()
+        print(f"Found: {start_url}")
+
+    count = crawl_newsletters(start_url, max_total=args.limit)
     print(f"\nScraped {count} new newsletters")
