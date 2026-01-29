@@ -3,9 +3,9 @@
 Linkwarden tools: sync newsletter descriptions and remove duplicate links.
 
 Usage:
-    # Sync newsletter descriptions to Linkwarden
-    python linkwarden_sync.py sync                    # use defaults
-    python linkwarden_sync.py sync --collection 14    # specify collection
+    # Sync newsletter descriptions to Linkwarden (all collections by default)
+    python linkwarden_sync.py sync                    # sync all collections
+    python linkwarden_sync.py sync --collection 14    # sync specific collection
     python linkwarden_sync.py sync --dry-run          # preview without updating
 
     # Remove duplicates across all collections (keeps oldest link in each group)
@@ -444,26 +444,30 @@ def update_link(
 
 def sync_links(
     base_url: str,
-    collection_id: int,
     jsonl_path: str,
+    token: str,
+    collection_id: int | None = None,
     dry_run: bool = False,
     limit: int = 0,
 ) -> None:
-    """Main sync logic: match URLs and update Linkwarden."""
-    token = os.environ.get("LINKWARDEN_TOKEN")
-    if not token:
-        print("Error: LINKWARDEN_TOKEN not set in environment")
-        return
+    """Main sync logic: match URLs and update Linkwarden.
 
+    If collection_id is None, syncs all collections.
+    """
     # Load newsletter index
-    print(f"Loading newsletter index from {jsonl_path}...")
+    console.print(f"Loading newsletter index from {jsonl_path}...")
     newsletter_index, newsletter_fuzzy_index = load_newsletter_index(jsonl_path)
-    print(f"  Indexed {len(newsletter_index)} unique links from newsletters")
+    console.print(f"  Indexed {len(newsletter_index)} unique links from newsletters")
 
     # Fetch Linkwarden links
-    print(f"\nFetching links from Linkwarden collection {collection_id}...")
-    linkwarden_links = fetch_collection_links(base_url, collection_id, token)
-    print(f"  Fetched {len(linkwarden_links)} links from Linkwarden")
+    if collection_id is not None:
+        console.print(f"\nFetching links from collection #{collection_id}...")
+        linkwarden_links = fetch_collection_links(base_url, collection_id, token)
+        console.print(f"  Fetched {len(linkwarden_links)} links")
+    else:
+        console.print("\nFetching links from all collections...")
+        linkwarden_links = fetch_all_links(base_url, token)
+        console.print(f"\nTotal: [bold]{len(linkwarden_links)}[/bold] links")
 
     # Match and prepare updates
     matches = []
@@ -628,8 +632,8 @@ def main():
     sync_parser.add_argument(
         "--collection",
         type=int,
-        default=14,
-        help="Linkwarden collection ID (default: 14)",
+        default=None,
+        help="Linkwarden collection ID (default: all collections)",
     )
     sync_parser.add_argument(
         "--jsonl",
@@ -661,8 +665,8 @@ def main():
     parser.add_argument(
         "--collection",
         type=int,
-        default=14,
-        help="Linkwarden collection ID (default: 14)",
+        default=None,
+        help="Linkwarden collection ID (default: all collections)",
     )
     parser.add_argument(
         "--jsonl",
@@ -697,8 +701,9 @@ def main():
     if args.command is None or args.command == "sync":
         sync_links(
             base_url=base_url,
-            collection_id=args.collection,
             jsonl_path=args.jsonl,
+            token=token,
+            collection_id=args.collection,
             dry_run=args.dry_run,
             limit=args.limit,
         )
