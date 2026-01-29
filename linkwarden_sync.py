@@ -238,7 +238,7 @@ def fetch_all_links(base_url: str, token: str) -> list[dict]:
     for collection in collections:
         collection_id = collection["id"]
         collection_name = collection.get("name", f"Collection {collection_id}")
-        console.print(f"  Fetching [cyan]\"{collection_name}\"[/cyan] (#{collection_id})... ", end="")
+        console.print(f"  Fetching #{collection_id:4} [cyan]\"{collection_name}\"[/cyan]... ", end="")
         links = fetch_collection_links(base_url, collection_id, token)
         # Add collection info to each link for reporting
         for link in links:
@@ -324,9 +324,9 @@ def print_duplicate_report(exact_groups: list[dict], fuzzy_groups: list[dict], t
                 collection = link.get("_collection_name", "?")
                 link_url = link.get("url", "")
                 if j == 0:
-                    console.print(f"    [green]KEEP[/green] #{link_id:5} | [{collection}] | {name}")
+                    console.print(f"    [green]KEEP[/green]   # {link_id:5} | [{collection}] | {name}")
                 else:
-                    console.print(f"    [red]DELETE[/red] #{link_id:5} | [{collection}] | {name}")
+                    console.print(f"    [red]DELETE[/red] # {link_id:5} | [{collection}] | {name}")
                     if link_url != first_url:
                         show_diff(first_url, link_url, indent="           ")
 
@@ -377,15 +377,14 @@ def remove_duplicates(base_url: str, token: str, dry_run: bool = False) -> None:
         collection = link.get("_collection_name", "?")
 
         if dry_run:
-            console.print(f"  [dim]Would delete[/dim] ID: {link_id} | [{collection}] | {link_url[:60]}")
-            deleted += 1
+            console.print(f"  [dim]Would delete[/dim] # {link_id:5} | [{collection}] | {link_url[:60]}")
         else:
             try:
                 delete_link(base_url, link_id, token)
-                console.print(f"  [red]Deleted[/red] ID: {link_id} | [{collection}] | {link_url[:60]}")
+                console.print(f"  [red]Deleted[/red] # {link_id:5} | [{collection}] | {link_url[:60]}")
                 deleted += 1
             except Exception as e:
-                console.print(f"  [bold red]Error deleting ID {link_id}:[/bold red] {e}")
+                console.print(f"  [bold red]Error deleting ID {link_id:5}:[/bold red] {e}")
                 errors += 1
 
     # Summary
@@ -563,7 +562,7 @@ def sync_links(
 
             # Log the update
             match_label = " [cyan](fuzzy match)[/cyan]" if match_type == "fuzzy" else ""
-            console.print(f"  [bold]Link ID: {link_id}[/bold]{match_label}")
+            console.print(f"  [bold]Link # {link_id:5}[/bold]{match_label}")
             if name_needs_update:
                 console.print("    [cyan]name:[/cyan]")
                 show_diff(link_name, new_name)
