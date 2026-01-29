@@ -238,7 +238,8 @@ def fetch_all_links(base_url: str, token: str) -> list[dict]:
     for collection in collections:
         collection_id = collection["id"]
         collection_name = collection.get("name", f"Collection {collection_id}")
-        console.print(f"  Fetching #{collection_id:4} [cyan]\"{collection_name}\"[/cyan]... ", end="")
+        collection_url = f"{base_url}/collections/{collection_id}"
+        console.print(f"  Fetching [{collection_id:3} # [cyan][link={collection_url}]{collection_name}[/link][/cyan]]... ", end="")
         links = fetch_collection_links(base_url, collection_id, token)
         # Add collection info to each link for reporting
         for link in links:
@@ -287,7 +288,7 @@ def find_duplicates(links: list[dict]) -> tuple[list[dict], list[dict]]:
     return exact_groups, fuzzy_groups
 
 
-def print_duplicate_report(exact_groups: list[dict], fuzzy_groups: list[dict], total_links: int, dry_run: bool = False) -> None:
+def print_duplicate_report(exact_groups: list[dict], fuzzy_groups: list[dict], total_links: int, base_url: str, dry_run: bool = False) -> None:
     """Display duplicate groups showing which links will be kept vs deleted."""
     exact_dup_count = sum(len(g["links"]) for g in exact_groups)
     fuzzy_dup_count = sum(len(g["links"]) for g in fuzzy_groups)
@@ -323,10 +324,11 @@ def print_duplicate_report(exact_groups: list[dict], fuzzy_groups: list[dict], t
                 name = link.get("name", "Untitled")[:60]
                 collection = link.get("_collection_name", "?")
                 link_url = link.get("url", "")
+                link_ui_url = f"{base_url}/preserved/{link_id}?format=4"
                 if j == 0:
-                    console.print(f"    [green]KEEP[/green]   # {link_id:5} | [{collection}] | {name}")
+                    console.print(f"    [green]KEEP[/green]   # {link_id:5} | [{collection}] | [link={link_ui_url}]{name}[/link]")
                 else:
-                    console.print(f"    [red]DELETE[/red] # {link_id:5} | [{collection}] | {name}")
+                    console.print(f"    [red]DELETE[/red] # {link_id:5} | [{collection}] | [link={link_ui_url}]{name}[/link]")
                     if link_url != first_url:
                         show_diff(first_url, link_url, indent="           ")
 
@@ -351,7 +353,7 @@ def remove_duplicates(base_url: str, token: str, dry_run: bool = False) -> None:
     exact_groups, fuzzy_groups = find_duplicates(all_links)
 
     # Display what will be kept/deleted
-    print_duplicate_report(exact_groups, fuzzy_groups, len(all_links), dry_run=dry_run)
+    print_duplicate_report(exact_groups, fuzzy_groups, len(all_links), base_url, dry_run=dry_run)
 
     if not exact_groups and not fuzzy_groups:
         return
