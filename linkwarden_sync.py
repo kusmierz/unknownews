@@ -238,13 +238,13 @@ def fetch_all_links(base_url: str, token: str) -> list[dict]:
     for collection in collections:
         collection_id = collection["id"]
         collection_name = collection.get("name", f"Collection {collection_id}")
-        console.print(f"  Fetching links from \"{collection_name}\" (collection {collection_id})...")
+        console.print(f"  Fetching [cyan]\"{collection_name}\"[/cyan] (#{collection_id})... ", end="")
         links = fetch_collection_links(base_url, collection_id, token)
         # Add collection info to each link for reporting
         for link in links:
             link["_collection_name"] = collection_name
         all_links.extend(links)
-        console.print(f"    {len(links)} links")
+        console.print(f"[green]{len(links)}[/green] links")
     return all_links
 
 
@@ -305,11 +305,16 @@ def display_duplicates(exact_groups: list[dict], fuzzy_groups: list[dict], total
             url = group["normalized_url"]
             links = group["links"]
             console.print(f"\n[bold][{i}][/bold] {url} ([red]{len(links)} links[/red])")
+            first_url = links[0].get("url", "") if links else ""
             for link in links:
                 link_id = link.get("id", "?")
                 name = link.get("name", "Untitled")[:60]
                 collection = link.get("_collection_name", "?")
+                link_url = link.get("url", "")
                 console.print(f"    ID: {link_id:5} | [{collection}] | {name}")
+                # Show diff if original URLs differ (even though normalized URLs match)
+                if link_url != first_url:
+                    show_diff(first_url, link_url, indent="           ")
 
     # Fuzzy duplicates
     if fuzzy_groups:
@@ -318,13 +323,18 @@ def display_duplicates(exact_groups: list[dict], fuzzy_groups: list[dict], total
             path_key = group["path_key"]
             links = group["links"]
             console.print(f"\n[bold][{i}][/bold] {path_key} ([yellow]{len(links)} links[/yellow])")
+            first_url = links[0].get("url", "") if links else ""
             for link in links:
                 link_id = link.get("id", "?")
                 name = link.get("name", "Untitled")[:60]
                 collection = link.get("_collection_name", "?")
-                url = link.get("url", "")
+                link_url = link.get("url", "")
                 console.print(f"    ID: {link_id:5} | [{collection}] | {name}")
-                console.print(f"           [dim]{url}[/dim]")
+                # Show diff against first URL if they differ
+                if link_url != first_url:
+                    show_diff(first_url, link_url, indent="           ")
+                else:
+                    console.print(f"           [dim]{link_url}[/dim]")
 
     if not exact_groups and not fuzzy_groups:
         console.print("\n[green]No duplicates found![/green]")
