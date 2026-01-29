@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Linkwarden tools: sync newsletter descriptions and find duplicate links.
+Linkwarden tools: sync newsletter descriptions and remove duplicate links.
 
 Usage:
     # Sync newsletter descriptions to Linkwarden
@@ -8,9 +8,9 @@ Usage:
     python linkwarden_sync.py sync --collection 14    # specify collection
     python linkwarden_sync.py sync --dry-run          # preview without updating
 
-    # Find duplicates across all collections
-    python linkwarden_sync.py find-duplicates         # human-readable output
-    python linkwarden_sync.py find-duplicates --json  # machine-readable output
+    # Remove duplicates across all collections (keeps oldest link in each group)
+    python linkwarden_sync.py remove-duplicates --dry-run  # preview deletions
+    python linkwarden_sync.py remove-duplicates            # actually delete duplicates
 
     # Backward compatibility (defaults to sync)
     python linkwarden_sync.py --dry-run               # same as: sync --dry-run
@@ -287,62 +287,62 @@ def find_duplicates(links: list[dict]) -> tuple[list[dict], list[dict]]:
     return exact_groups, fuzzy_groups
 
 
-def display_duplicates(exact_groups: list[dict], fuzzy_groups: list[dict], total_links: int) -> None:
-    """Display duplicate groups in human-readable format."""
+def print_duplicate_report(exact_groups: list[dict], fuzzy_groups: list[dict], total_links: int, dry_run: bool = False) -> None:
+    """Display duplicate groups showing which links will be kept vs deleted."""
     exact_dup_count = sum(len(g["links"]) for g in exact_groups)
     fuzzy_dup_count = sum(len(g["links"]) for g in fuzzy_groups)
+    total_to_delete = sum(len(g["links"]) - 1 for g in exact_groups + fuzzy_groups)
 
     # Summary statistics
+    action_word = "Would delete" if dry_run else "Will delete"
     console.print("\n[bold]=== Duplicate Report ===[/bold]")
     console.print(f"Total links:      {total_links}")
     console.print(f"Exact duplicates: [red]{exact_dup_count}[/red] links in [red]{len(exact_groups)}[/red] groups")
     console.print(f"Fuzzy duplicates: [yellow]{fuzzy_dup_count}[/yellow] links in [yellow]{len(fuzzy_groups)}[/yellow] groups")
-
-    # Exact duplicates
-    if exact_groups:
-        console.print("\n[bold red]--- Exact Duplicates ---[/bold red]")
-        for i, group in enumerate(exact_groups, 1):
-            url = group["normalized_url"]
-            links = group["links"]
-            console.print(f"\n[bold][{i}][/bold] {url} ([red]{len(links)} links[/red])")
-            first_url = links[0].get("url", "") if links else ""
-            for link in links:
-                link_id = link.get("id", "?")
-                name = link.get("name", "Untitled")[:60]
-                collection = link.get("_collection_name", "?")
-                link_url = link.get("url", "")
-                console.print(f"    ID: {link_id:5} | [{collection}] | {name}")
-                # Show diff if original URLs differ (even though normalized URLs match)
-                if link_url != first_url:
-                    show_diff(first_url, link_url, indent="           ")
-
-    # Fuzzy duplicates
-    if fuzzy_groups:
-        console.print("\n[bold yellow]--- Fuzzy Duplicates ---[/bold yellow]")
-        for i, group in enumerate(fuzzy_groups, 1):
-            path_key = group["path_key"]
-            links = group["links"]
-            console.print(f"\n[bold][{i}][/bold] {path_key} ([yellow]{len(links)} links[/yellow])")
-            first_url = links[0].get("url", "") if links else ""
-            for link in links:
-                link_id = link.get("id", "?")
-                name = link.get("name", "Untitled")[:60]
-                collection = link.get("_collection_name", "?")
-                link_url = link.get("url", "")
-                console.print(f"    ID: {link_id:5} | [{collection}] | {name}")
-                # Show diff against first URL if they differ
-                if link_url != first_url:
-                    show_diff(first_url, link_url, indent="           ")
-                else:
-                    console.print(f"           [dim]{link_url}[/dim]")
+    console.print(f"{action_word}:    [bold red]{total_to_delete}[/bold red] links (keeping oldest in each group)")
 
     if not exact_groups and not fuzzy_groups:
         console.print("\n[green]No duplicates found![/green]")
+        return
+
+    # Display both exact and fuzzy groups
+    sections = [
+        (exact_groups, "Exact Duplicates", "normalized_url", "red"),
+        (fuzzy_groups, "Fuzzy Duplicates", "path_key", "yellow"),
+    ]
+    for groups, title, key_field, color in sections:
+        if not groups:
+            continue
+        console.print(f"\n[bold {color}]--- {title} ---[/bold {color}]")
+        for i, group in enumerate(groups, 1):
+            links = sorted(group["links"], key=lambda x: x.get("id", 0))
+            console.print(f"\n[bold][{i}][/bold] {group[key_field]} ([{color}]{len(links)} links[/{color}])")
+            first_url = links[0].get("url", "") if links else ""
+            for j, link in enumerate(links):
+                link_id = link.get("id", "?")
+                name = link.get("name", "Untitled")[:60]
+                collection = link.get("_collection_name", "?")
+                link_url = link.get("url", "")
+                if j == 0:
+                    console.print(f"    [green]KEEP[/green] #{link_id:5} | [{collection}] | {name}")
+                else:
+                    console.print(f"    [red]DELETE[/red] #{link_id:5} | [{collection}] | {name}")
+                    if link_url != first_url:
+                        show_diff(first_url, link_url, indent="           ")
 
 
-def find_all_duplicates(base_url: str, token: str, output_json: bool = False) -> None:
-    """Fetch all links across all collections and find duplicates."""
-    console.print("Finding duplicates across all collections...")
+def delete_link(base_url: str, link_id: int, token: str) -> bool:
+    """Delete a link from Linkwarden."""
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.delete(f"{base_url}/api/v1/links/{link_id}", headers=headers)
+    response.raise_for_status()
+    return True
+
+
+def remove_duplicates(base_url: str, token: str, dry_run: bool = False) -> None:
+    """Fetch all links across all collections, find duplicates, and remove them."""
+    action_word = "[DRY RUN] " if dry_run else ""
+    console.print(f"{action_word}Finding and removing duplicates across all collections...")
     console.print("Fetching collections...")
 
     all_links = fetch_all_links(base_url, token)
@@ -350,52 +350,49 @@ def find_all_duplicates(base_url: str, token: str, output_json: bool = False) ->
 
     exact_groups, fuzzy_groups = find_duplicates(all_links)
 
-    if output_json:
-        # Machine-readable JSON output
-        output = {
-            "total_links": len(all_links),
-            "exact_duplicates": {
-                "count": sum(len(g["links"]) for g in exact_groups),
-                "groups": len(exact_groups),
-                "details": [
-                    {
-                        "normalized_url": g["normalized_url"],
-                        "links": [
-                            {
-                                "id": link.get("id"),
-                                "name": link.get("name"),
-                                "url": link.get("url"),
-                                "collection": link.get("_collection_name"),
-                            }
-                            for link in g["links"]
-                        ],
-                    }
-                    for g in exact_groups
-                ],
-            },
-            "fuzzy_duplicates": {
-                "count": sum(len(g["links"]) for g in fuzzy_groups),
-                "groups": len(fuzzy_groups),
-                "details": [
-                    {
-                        "path_key": g["path_key"],
-                        "links": [
-                            {
-                                "id": link.get("id"),
-                                "name": link.get("name"),
-                                "url": link.get("url"),
-                                "collection": link.get("_collection_name"),
-                            }
-                            for link in g["links"]
-                        ],
-                    }
-                    for g in fuzzy_groups
-                ],
-            },
-        }
-        print(json.dumps(output, indent=2))
-    else:
-        display_duplicates(exact_groups, fuzzy_groups, len(all_links))
+    # Display what will be kept/deleted
+    print_duplicate_report(exact_groups, fuzzy_groups, len(all_links), dry_run=dry_run)
+
+    if not exact_groups and not fuzzy_groups:
+        return
+
+    # Collect all links to delete (all but the oldest in each group)
+    links_to_delete = []
+    for group in exact_groups + fuzzy_groups:
+        sorted_links = sorted(group["links"], key=lambda x: x.get("id", 0))
+        # Keep the first (oldest) link, delete the rest
+        links_to_delete.extend(sorted_links[1:])
+
+    if not links_to_delete:
+        return
+
+    # Delete duplicates
+    console.print(f"\n{action_word}Deleting {len(links_to_delete)} duplicate links...")
+    deleted = 0
+    errors = 0
+
+    for link in links_to_delete:
+        link_id = link.get("id")
+        link_url = link.get("url", "")
+        collection = link.get("_collection_name", "?")
+
+        if dry_run:
+            console.print(f"  [dim]Would delete[/dim] ID: {link_id} | [{collection}] | {link_url[:60]}")
+            deleted += 1
+        else:
+            try:
+                delete_link(base_url, link_id, token)
+                console.print(f"  [red]Deleted[/red] ID: {link_id} | [{collection}] | {link_url[:60]}")
+                deleted += 1
+            except Exception as e:
+                console.print(f"  [bold red]Error deleting ID {link_id}:[/bold red] {e}")
+                errors += 1
+
+    # Summary
+    console.print(f"\n[bold]{action_word}Summary:[/bold]")
+    console.print(f"  [red]Deleted: {deleted}[/red]")
+    if errors:
+        console.print(f"  [bold red]Errors: {errors}[/bold red]")
 
 
 def update_link(
@@ -621,7 +618,7 @@ def sync_links(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Linkwarden tools: sync newsletter descriptions and find duplicates"
+        description="Linkwarden tools: sync newsletter descriptions and remove duplicates"
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -651,13 +648,12 @@ def main():
         help="Limit number of links to update (0 = no limit)",
     )
 
-    # find-duplicates command (new)
-    dup_parser = subparsers.add_parser("find-duplicates", help="Find duplicate links across all collections")
+    # remove-duplicates command
+    dup_parser = subparsers.add_parser("remove-duplicates", help="Find and remove duplicate links across all collections")
     dup_parser.add_argument(
-        "--json",
+        "--dry-run",
         action="store_true",
-        dest="output_json",
-        help="Output results as JSON",
+        help="Preview deletions without actually deleting",
     )
 
     # For backward compatibility, also add sync args to main parser
@@ -705,8 +701,8 @@ def main():
             dry_run=args.dry_run,
             limit=args.limit,
         )
-    elif args.command == "find-duplicates":
-        find_all_duplicates(base_url, token, output_json=args.output_json)
+    elif args.command == "remove-duplicates":
+        remove_duplicates(base_url, token, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
