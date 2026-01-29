@@ -17,10 +17,15 @@ python scraper.py <url> [-n LIMIT]
 python scraper.py https://mrugalski.pl/nl/wu/u8d1L2kQOHGVezsjqUWH0g -n 50
 
 # Sync to Linkwarden
-python linkwarden_sync.py --dry-run          # preview changes
-python linkwarden_sync.py                    # sync to collection 14
-python linkwarden_sync.py --collection 14    # specify collection
-python linkwarden_sync.py --limit 5          # limit updates
+python linkwarden_sync.py sync --dry-run          # preview changes
+python linkwarden_sync.py sync                    # sync to collection 14
+python linkwarden_sync.py sync --collection 14    # specify collection
+python linkwarden_sync.py sync --limit 5          # limit updates
+python linkwarden_sync.py --dry-run               # backward compatible (no subcommand)
+
+# Find duplicate links across all collections
+python linkwarden_sync.py find-duplicates         # human-readable output
+python linkwarden_sync.py find-duplicates --json  # machine-readable JSON output
 ```
 
 ## Architecture
@@ -38,11 +43,15 @@ Helper functions:
 - `append_newsletter(newsletter, output_dir)` - append to JSONL
 
 ### linkwarden_sync.py
-Syncs newsletter descriptions to Linkwarden bookmarks. Uses `rich` for colored diff output.
+Linkwarden tools: syncs newsletter descriptions and finds duplicate links. Uses `rich` for colored output.
 
 Main functions:
 - `load_newsletter_index(jsonl_path)` -> `(exact_index, fuzzy_index)` - builds two indexes for matching
 - `fetch_collection_links(base_url, collection_id, token)` -> `list[dict]` - uses `/api/v1/search` with pagination
+- `fetch_all_collections(base_url, token)` -> `list[dict]` - fetches all collections from Linkwarden
+- `fetch_all_links(base_url, token)` -> `list[dict]` - fetches all links from all collections
+- `find_duplicates(links)` -> `(exact_groups, fuzzy_groups)` - finds duplicates using normalized URL and fuzzy matching
+- `find_all_duplicates(base_url, token, output_json)` - main entry point for duplicate detection
 - `update_link(base_url, link, new_name, new_url, new_description, new_tags, token)` -> `bool` - PUT to update
 - `sync_links(base_url, collection_id, jsonl_path, dry_run, limit)` - main sync logic
 
@@ -50,6 +59,7 @@ Helpers:
 - `normalize_url(url)` - removes fragments, tracking params (utm_*, fbclid, etc.), normalizes http->https
 - `get_url_path_key(url)` - extracts domain+path for fuzzy matching
 - `show_diff(old, new)` - displays inline diff with highlighted changes
+- `display_duplicates(exact_groups, fuzzy_groups, total_links)` - displays duplicate report
 
 ## Output structure
 
@@ -108,6 +118,12 @@ PUT /api/v1/links/{id}
   "collection": { ... },
   "tags": [{"name": "unknow"}, {"name": "2024-12-20"}]
 }
+```
+
+Get all collections:
+```
+GET /api/v1/collections
+Response: [{ "id": 14, "name": "unknow", ... }, ...]
 ```
 
 Note: `/api/v1/links` GET is deprecated, use `/api/v1/search` instead.

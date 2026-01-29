@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 """
-Sync newsletter link descriptions and date tags to Linkwarden bookmarks.
+Linkwarden tools: sync newsletter descriptions and find duplicate links.
 
 Usage:
-    python linkwarden_sync.py                    # use defaults
-    python linkwarden_sync.py --collection 14    # specify collection
-    python linkwarden_sync.py --dry-run          # preview without updating
+    # Sync newsletter descriptions to Linkwarden
+    python linkwarden_sync.py sync                    # use defaults
+    python linkwarden_sync.py sync --collection 14    # specify collection
+    python linkwarden_sync.py sync --dry-run          # preview without updating
+
+    # Find duplicates across all collections
+    python linkwarden_sync.py find-duplicates         # human-readable output
+    python linkwarden_sync.py find-duplicates --json  # machine-readable output
+
+    # Backward compatibility (defaults to sync)
+    python linkwarden_sync.py --dry-run               # same as: sync --dry-run
 """
 
 import argparse
+from collections import defaultdict
 import difflib
 import json
 import os
@@ -210,6 +219,173 @@ def fetch_collection_links(base_url: str, collection_id: int, token: str) -> lis
         cursor = next_cursor
 
     return all_links
+
+
+def fetch_all_collections(base_url: str, token: str) -> list[dict]:
+    """Fetch all collections from Linkwarden."""
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(f"{base_url}/api/v1/collections", headers=headers)
+    response.raise_for_status()
+    data = response.json()
+    # API returns {"response": [...]}
+    return data.get("response", [])
+
+
+def fetch_all_links(base_url: str, token: str) -> list[dict]:
+    """Fetch all links from all collections."""
+    collections = fetch_all_collections(base_url, token)
+    all_links = []
+    for collection in collections:
+        collection_id = collection["id"]
+        collection_name = collection.get("name", f"Collection {collection_id}")
+        console.print(f"  Fetching links from \"{collection_name}\" (collection {collection_id})...")
+        links = fetch_collection_links(base_url, collection_id, token)
+        # Add collection info to each link for reporting
+        for link in links:
+            link["_collection_name"] = collection_name
+        all_links.extend(links)
+        console.print(f"    {len(links)} links")
+    return all_links
+
+
+def find_duplicates(links: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Find duplicate links using exact (normalized URL) and fuzzy (path key) matching.
+
+    Returns:
+        - exact_groups: list of duplicate groups with exact URL matches
+        - fuzzy_groups: list of duplicate groups with fuzzy path matches
+    """
+    # Build exact match index: normalized_url -> [links]
+    exact_index = defaultdict(list)
+    for link in links:
+        normalized = normalize_url(link.get("url", ""))
+        if normalized:
+            exact_index[normalized].append(link)
+
+    # Extract exact duplicates (groups with 2+ links)
+    exact_groups = []
+    exact_link_ids = set()
+    for url, group in exact_index.items():
+        if len(group) > 1:
+            exact_groups.append({"normalized_url": url, "links": group, "match_type": "exact"})
+            exact_link_ids.update(link["id"] for link in group)
+
+    # Build fuzzy index for remaining links (not already in exact duplicates)
+    fuzzy_index = defaultdict(list)
+    for link in links:
+        if link["id"] not in exact_link_ids:
+            path_key = get_url_path_key(link.get("url", ""))
+            if path_key:
+                fuzzy_index[path_key].append(link)
+
+    # Extract fuzzy duplicates
+    fuzzy_groups = [
+        {"path_key": key, "links": group, "match_type": "fuzzy"}
+        for key, group in fuzzy_index.items() if len(group) > 1
+    ]
+
+    return exact_groups, fuzzy_groups
+
+
+def display_duplicates(exact_groups: list[dict], fuzzy_groups: list[dict], total_links: int) -> None:
+    """Display duplicate groups in human-readable format."""
+    exact_dup_count = sum(len(g["links"]) for g in exact_groups)
+    fuzzy_dup_count = sum(len(g["links"]) for g in fuzzy_groups)
+
+    # Summary statistics
+    console.print("\n[bold]=== Duplicate Report ===[/bold]")
+    console.print(f"Total links:      {total_links}")
+    console.print(f"Exact duplicates: [red]{exact_dup_count}[/red] links in [red]{len(exact_groups)}[/red] groups")
+    console.print(f"Fuzzy duplicates: [yellow]{fuzzy_dup_count}[/yellow] links in [yellow]{len(fuzzy_groups)}[/yellow] groups")
+
+    # Exact duplicates
+    if exact_groups:
+        console.print("\n[bold red]--- Exact Duplicates ---[/bold red]")
+        for i, group in enumerate(exact_groups, 1):
+            url = group["normalized_url"]
+            links = group["links"]
+            console.print(f"\n[bold][{i}][/bold] {url} ([red]{len(links)} links[/red])")
+            for link in links:
+                link_id = link.get("id", "?")
+                name = link.get("name", "Untitled")[:60]
+                collection = link.get("_collection_name", "?")
+                console.print(f"    ID: {link_id:5} | [{collection}] | {name}")
+
+    # Fuzzy duplicates
+    if fuzzy_groups:
+        console.print("\n[bold yellow]--- Fuzzy Duplicates ---[/bold yellow]")
+        for i, group in enumerate(fuzzy_groups, 1):
+            path_key = group["path_key"]
+            links = group["links"]
+            console.print(f"\n[bold][{i}][/bold] {path_key} ([yellow]{len(links)} links[/yellow])")
+            for link in links:
+                link_id = link.get("id", "?")
+                name = link.get("name", "Untitled")[:60]
+                collection = link.get("_collection_name", "?")
+                url = link.get("url", "")
+                console.print(f"    ID: {link_id:5} | [{collection}] | {name}")
+                console.print(f"           [dim]{url}[/dim]")
+
+    if not exact_groups and not fuzzy_groups:
+        console.print("\n[green]No duplicates found![/green]")
+
+
+def find_all_duplicates(base_url: str, token: str, output_json: bool = False) -> None:
+    """Fetch all links across all collections and find duplicates."""
+    console.print("Finding duplicates across all collections...")
+    console.print("Fetching collections...")
+
+    all_links = fetch_all_links(base_url, token)
+    console.print(f"\nTotal: [bold]{len(all_links)}[/bold] links")
+
+    exact_groups, fuzzy_groups = find_duplicates(all_links)
+
+    if output_json:
+        # Machine-readable JSON output
+        output = {
+            "total_links": len(all_links),
+            "exact_duplicates": {
+                "count": sum(len(g["links"]) for g in exact_groups),
+                "groups": len(exact_groups),
+                "details": [
+                    {
+                        "normalized_url": g["normalized_url"],
+                        "links": [
+                            {
+                                "id": link.get("id"),
+                                "name": link.get("name"),
+                                "url": link.get("url"),
+                                "collection": link.get("_collection_name"),
+                            }
+                            for link in g["links"]
+                        ],
+                    }
+                    for g in exact_groups
+                ],
+            },
+            "fuzzy_duplicates": {
+                "count": sum(len(g["links"]) for g in fuzzy_groups),
+                "groups": len(fuzzy_groups),
+                "details": [
+                    {
+                        "path_key": g["path_key"],
+                        "links": [
+                            {
+                                "id": link.get("id"),
+                                "name": link.get("name"),
+                                "url": link.get("url"),
+                                "collection": link.get("_collection_name"),
+                            }
+                            for link in g["links"]
+                        ],
+                    }
+                    for g in fuzzy_groups
+                ],
+            },
+        }
+        print(json.dumps(output, indent=2))
+    else:
+        display_duplicates(exact_groups, fuzzy_groups, len(all_links))
 
 
 def update_link(
@@ -435,8 +611,46 @@ def sync_links(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Sync newsletter link descriptions to Linkwarden"
+        description="Linkwarden tools: sync newsletter descriptions and find duplicates"
     )
+    subparsers = parser.add_subparsers(dest="command")
+
+    # sync command (existing functionality)
+    sync_parser = subparsers.add_parser("sync", help="Sync newsletter descriptions to Linkwarden")
+    sync_parser.add_argument(
+        "--collection",
+        type=int,
+        default=14,
+        help="Linkwarden collection ID (default: 14)",
+    )
+    sync_parser.add_argument(
+        "--jsonl",
+        type=str,
+        default="data/newsletters.jsonl",
+        help="Path to newsletters.jsonl (default: data/newsletters.jsonl)",
+    )
+    sync_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview changes without updating Linkwarden",
+    )
+    sync_parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Limit number of links to update (0 = no limit)",
+    )
+
+    # find-duplicates command (new)
+    dup_parser = subparsers.add_parser("find-duplicates", help="Find duplicate links across all collections")
+    dup_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="output_json",
+        help="Output results as JSON",
+    )
+
+    # For backward compatibility, also add sync args to main parser
     parser.add_argument(
         "--collection",
         type=int,
@@ -460,20 +674,29 @@ def main():
         default=0,
         help="Limit number of links to update (0 = no limit)",
     )
+
     args = parser.parse_args()
 
     # Load environment variables
     load_dotenv()
 
     base_url = os.environ.get("LINKWARDEN_URL", "https://links.kusmierz.be")
+    token = os.environ.get("LINKWARDEN_TOKEN")
+    if not token:
+        console.print("[red]Error: LINKWARDEN_TOKEN not set in environment[/red]")
+        sys.exit(1)
 
-    sync_links(
-        base_url=base_url,
-        collection_id=args.collection,
-        jsonl_path=args.jsonl,
-        dry_run=args.dry_run,
-        limit=args.limit,
-    )
+    # Default to sync for backward compatibility (when no subcommand given)
+    if args.command is None or args.command == "sync":
+        sync_links(
+            base_url=base_url,
+            collection_id=args.collection,
+            jsonl_path=args.jsonl,
+            dry_run=args.dry_run,
+            limit=args.limit,
+        )
+    elif args.command == "find-duplicates":
+        find_all_duplicates(base_url, token, output_json=args.output_json)
 
 
 if __name__ == "__main__":
