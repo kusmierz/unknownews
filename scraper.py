@@ -8,6 +8,10 @@ from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
+from rich.console import Console
+from rich.table import Table
+
+console = Console()
 
 
 def clean_text(text: str) -> str:
@@ -189,9 +193,7 @@ def scrape_newsletter(url: str) -> tuple[dict, list[dict]]:
             link_title = re.sub(r"^\d+\.\s*", "", title_elem.get_text(separator=" ", strip=True))
             link_href = link_elem.get("href", "")
             if link_href.startswith("https://uw7.org/"):
-                print(f"Converting to premium URL: {link_href}...")
                 link_href = get_premium_url(link_href)
-                print(f"    -> {link_href}")
 
             links.append({
                 "title": link_title,
@@ -297,49 +299,64 @@ def crawl_newsletters(
     # Create output dir
     Path(output_dir).mkdir(exist_ok=True)
 
-    # Load already scraped URLs
+    # Load successfully scraped URLs from previous runs
     scraped_urls = load_scraped_urls(output_dir)
     initial_count = len(scraped_urls)
-    if initial_count:
-        print(f"Found {initial_count} existing newsletters, fetching up to {max_total}...")
+    console.print(f"[bold]Existing newsletters:[/bold] [cyan]{initial_count}[/cyan]")
+    console.print(f"[bold]Max to fetch:[/bold] [cyan]{max_total}[/cyan]")
 
-    # Queue of URLs to scrape, visited tracks URLs we've processed this run
+    # seen = scraped + processed this run (prevents queue duplicates and re-fetching)
+    seen = scraped_urls.copy()
     queue = deque([start_url])
-    visited = set()
     scraped_count = 0
+
+    console.print(f"\n[bold]Crawling newsletters...[/bold]")
 
     while queue and scraped_count < max_total:
         url = queue.popleft()
 
-        if url in visited:
+        if url in seen:
             continue
-        visited.add(url)
-
-        # Skip already scraped URLs entirely (no HTTP request needed)
-        if url in scraped_urls:
-            continue
+        seen.add(url)
 
         try:
+            console.print(f"  [dim]Fetching:[/dim] {url[:60]}...", end=" ")
             newsletter, previous = scrape_newsletter(url)
 
             # Add previous newsletters to queue for discovery
+            new_discovered = 0
             for prev in previous:
-                if prev["url"] not in visited:
+                if prev["url"] not in seen:
                     queue.append(prev["url"])
+                    new_discovered += 1
 
             newsletter["url"] = url
-            print(f"Scraping: {newsletter['date']} - {newsletter['title'][:50]}...")
+            console.print(f"[green]OK[/green]")
+
+            # Show newsletter details
+            title_display = newsletter['title'][:50] + "..." if len(newsletter['title']) > 50 else newsletter['title']
+            console.print(f"    [cyan]{newsletter['date']}[/cyan] | {title_display}")
+            console.print(f"    [dim]Links:[/dim] [green]{len(newsletter['links'])}[/green]", end="")
+            if new_discovered:
+                console.print(f" | [dim]Discovered:[/dim] [yellow]{new_discovered}[/yellow] previous editions", end="")
+            console.print()
 
             append_newsletter(newsletter, output_dir)
             scraped_urls.add(url)
             scraped_count += 1
 
         except Exception as e:
-            print(f"Error scraping {url}: {e}")
+            console.print(f"[red]ERROR[/red]")
+            console.print(f"    [red]{e}[/red]")
             continue
 
     # Save updated scraped URLs
     save_scraped_urls(scraped_urls, output_dir)
+
+    # Summary
+    console.print(f"\n[bold]=== Summary ===[/bold]")
+    console.print(f"  [green]New:[/green] {scraped_count}")
+    console.print(f"  [bold]Total:[/bold] {len(scraped_urls)}")
 
     return scraped_count
 
@@ -355,10 +372,12 @@ if __name__ == "__main__":
 
     if args.url:
         start_url = args.url
+        console.print(f"[bold]Starting URL:[/bold] {start_url}")
     else:
-        print("Fetching latest newsletter URL...")
+        console.print("[dim]Fetching latest newsletter URL...[/dim]", end=" ")
         start_url = get_latest_newsletter_url()
-        print(f"Found: {start_url}")
+        console.print(f"[green]OK[/green]")
+        console.print(f"[bold]Starting URL:[/bold] {start_url}")
 
-    count = crawl_newsletters(start_url, max_total=args.limit)
-    print(f"\nScraped {count} new newsletters")
+    console.print()
+    crawl_newsletters(start_url, max_total=args.limit)
