@@ -25,14 +25,30 @@ from collections import defaultdict
 import difflib
 import json
 import os
+import shutil
 import sys
 from urllib.parse import urlparse
 
 import requests
 from dotenv import load_dotenv
+import hashlib
+
 from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
+
+# Colors for tags (visually distinct, readable on dark backgrounds)
+TAG_COLORS = [
+    "bright_magenta", "bright_cyan", "bright_green", "bright_yellow",
+    "bright_blue", "bright_red", "magenta", "cyan", "green", "yellow",
+    "blue", "red", "deep_pink3", "dark_orange", "chartreuse3", "turquoise2",
+]
+
+
+def get_tag_color(tag_name: str) -> str:
+    """Get a consistent color for a tag based on its name."""
+    tag_hash = int(hashlib.md5(tag_name.encode()).hexdigest(), 16)
+    return TAG_COLORS[tag_hash % len(TAG_COLORS)]
 
 console = Console()
 
@@ -376,14 +392,12 @@ def list_links(base_url: str, token: str, collection_id: int | None = None) -> N
         collection_name = link.get("_collection_name", "Unknown")
         by_collection[collection_name].append(link)
 
-    # Calculate available width for description (terminal width minus fixed elements)
-    # Format: "  #12345 Link Title - Description..."
-    # Fixed: indent(2) + # + id(5) + space + link markup overhead
-    terminal_width = console.width or 120
-    # Reserve space for: "  #12345 " (9 chars) + " - " (3 chars) + some buffer
-    link_name_max = int(min(60, terminal_width // 3))  # Max width for link name
-    desc_overhead = 9 + 3 + link_name_max + 10  # 10 for safety buffer
-    desc_max_width = int(max(20, terminal_width - desc_overhead))
+    # Calculate available widths
+    terminal_width = shutil.get_terminal_size().columns or 120
+    # Line 1: "  #12345 Link Name  [tags]" - name can be generous
+    link_name_max = int(min(80, terminal_width - 30))  # Leave room for ID and tags
+    # Line 2: "         Description..." - indent is 9 spaces
+    desc_max_width = terminal_width - 10  # 9 for indent + 1 buffer
 
     # Display links grouped by collection
     for collection_name, collection_links in sorted(by_collection.items()):
@@ -396,6 +410,7 @@ def list_links(base_url: str, token: str, collection_id: int | None = None) -> N
             if is_untitled:
                 name = "Untitled"
             description = link.get("description", "") or ""
+            tags = [t.get("name", "") for t in link.get("tags", []) if t.get("name")]
             link_ui_url = f"{base_url}/preserved/{link_id}?format=4"
 
             # Truncate name if too long
@@ -408,19 +423,28 @@ def list_links(base_url: str, token: str, collection_id: int | None = None) -> N
             # Replace newlines with spaces for single-line display
             description = description.replace("\n", " ").strip()
 
-            # Build output using Text object to avoid Rich markup parsing issues
-            # with problematic Unicode characters
-            line = Text()
-            line.append(f"  #{link_id:<5} ", style="cyan")
-            # Add name as link, then padding separately
+            # Line 1: ID, name, tags
+            line1 = Text()
+            line1.append(f"  #{link_id:<5} ", style="cyan")
             name_style = f"italic link {link_ui_url}" if is_untitled else f"link {link_ui_url}"
-            line.append(name, style=name_style)
-            padding = " " * (link_name_max - len(name))
-            line.append(padding)
+            line1.append(name, style=name_style)
+            if tags:
+                line1.append("  ")
+                for i, tag in enumerate(tags):
+                    if i > 0:
+                        line1.append(" ")
+                    line1.append(f"[{tag}]", style=f"dim {get_tag_color(tag)}")
+            console.print(line1)
+
+            # Line 2: description (indented)
             if description:
-                line.append(f" {description}", style="dim")
-            console.print(line)
-        console.print()  # Empty line between collections
+                line2 = Text()
+                line2.append("         ")  # Align with name (9 spaces)
+                line2.append(description, style="dim")
+                console.print(line2)
+
+            console.print()  # Empty line between links
+        console.print()  # Extra line between collections
 
     # Check for duplicates
     exact_groups, fuzzy_groups = find_duplicates(links)
