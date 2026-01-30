@@ -16,6 +16,10 @@ pip install -r requirements.txt  # install deps
 python scraper.py <url> [-n LIMIT]
 python scraper.py https://mrugalski.pl/nl/wu/u8d1L2kQOHGVezsjqUWH0g -n 50
 
+# List links in Linkwarden
+python linkwarden_sync.py list                    # list all links grouped by collection
+python linkwarden_sync.py list --collection 14   # list links from specific collection
+
 # Sync to Linkwarden
 python linkwarden_sync.py sync --dry-run          # preview changes
 python linkwarden_sync.py sync                    # sync to collection 14
@@ -23,9 +27,9 @@ python linkwarden_sync.py sync --collection 14    # specify collection
 python linkwarden_sync.py sync --limit 5          # limit updates
 python linkwarden_sync.py --dry-run               # backward compatible (no subcommand)
 
-# Find duplicate links across all collections
-python linkwarden_sync.py find-duplicates         # human-readable output
-python linkwarden_sync.py find-duplicates --json  # machine-readable JSON output
+# Remove duplicate links across all collections
+python linkwarden_sync.py remove-duplicates --dry-run  # preview deletions
+python linkwarden_sync.py remove-duplicates            # actually delete duplicates
 ```
 
 ## Architecture
@@ -50,8 +54,9 @@ Main functions:
 - `fetch_collection_links(base_url, collection_id, token)` -> `list[dict]` - uses `/api/v1/search` with pagination
 - `fetch_all_collections(base_url, token)` -> `list[dict]` - fetches all collections from Linkwarden
 - `fetch_all_links(base_url, token)` -> `list[dict]` - fetches all links from all collections
+- `list_links(base_url, token, collection_id)` - lists all links grouped by collection with clickable names
 - `find_duplicates(links)` -> `(exact_groups, fuzzy_groups)` - finds duplicates using normalized URL and fuzzy matching
-- `find_all_duplicates(base_url, token, output_json)` - main entry point for duplicate detection
+- `remove_duplicates(base_url, token, dry_run)` - finds and removes duplicate links
 - `update_link(base_url, link, new_name, new_url, new_description, new_tags, token)` -> `bool` - PUT to update
 - `sync_links(base_url, collection_id, jsonl_path, dry_run, limit)` - main sync logic
 

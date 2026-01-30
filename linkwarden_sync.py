@@ -3,6 +3,10 @@
 Linkwarden tools: sync newsletter descriptions and remove duplicate links.
 
 Usage:
+    # List all links grouped by collection
+    python linkwarden_sync.py list                    # list all links
+    python linkwarden_sync.py list --collection 14   # list links from specific collection
+
     # Sync newsletter descriptions to Linkwarden (all collections by default)
     python linkwarden_sync.py sync                    # sync all collections
     python linkwarden_sync.py sync --collection 14    # sync specific collection
@@ -27,6 +31,7 @@ from urllib.parse import urlparse
 import requests
 from dotenv import load_dotenv
 from rich.console import Console
+from rich.markup import escape
 from rich.text import Text
 
 console = Console()
@@ -341,6 +346,83 @@ def delete_link(base_url: str, link_id: int, token: str) -> bool:
     return True
 
 
+def list_links(base_url: str, token: str, collection_id: int | None = None) -> None:
+    """List all links grouped by collection."""
+    # Fetch links
+    if collection_id is not None:
+        console.print(f"Fetching links from collection #{collection_id}...")
+        links = fetch_collection_links(base_url, collection_id, token)
+        # Add collection info manually since fetch_collection_links doesn't include it
+        collections = fetch_all_collections(base_url, token)
+        collection_name = next(
+            (c.get("name", f"Collection {collection_id}") for c in collections if c["id"] == collection_id),
+            f"Collection {collection_id}"
+        )
+        for link in links:
+            link["_collection_name"] = collection_name
+    else:
+        console.print("Fetching links from all collections...")
+        links = fetch_all_links(base_url, token)
+
+    console.print(f"\nTotal: [bold]{len(links)}[/bold] links\n")
+
+    if not links:
+        console.print("[yellow]No links found.[/yellow]")
+        return
+
+    # Group links by collection
+    by_collection = defaultdict(list)
+    for link in links:
+        collection_name = link.get("_collection_name", "Unknown")
+        by_collection[collection_name].append(link)
+
+    # Calculate available width for description (terminal width minus fixed elements)
+    # Format: "  #12345 Link Title - Description..."
+    # Fixed: indent(2) + # + id(5) + space + link markup overhead
+    terminal_width = console.width or 120
+    # Reserve space for: "  #12345 " (9 chars) + " - " (3 chars) + some buffer
+    link_name_max = int(min(60, terminal_width // 3))  # Max width for link name
+    desc_overhead = 9 + 3 + link_name_max + 10  # 10 for safety buffer
+    desc_max_width = int(max(20, terminal_width - desc_overhead))
+
+    # Display links grouped by collection
+    for collection_name, collection_links in sorted(by_collection.items()):
+        collection_url = f"{base_url}/collections/{collection_id}"
+        console.print(f"[bold][[link={collection_url}]{escape(collection_name)}[/link] ({len(collection_links)} links)][/bold]")
+        for link in sorted(collection_links, key=lambda x: x.get("id", 0)):
+            link_id = link.get("id", "?")
+            name = (link.get("name") or "").strip()
+            is_untitled = not name or name == "Just a moment..."
+            if is_untitled:
+                name = "Untitled"
+            description = link.get("description", "") or ""
+            link_ui_url = f"{base_url}/preserved/{link_id}?format=4"
+
+            # Truncate name if too long
+            if len(name) > link_name_max:
+                name = name[:link_name_max - 3] + "..."
+
+            # Truncate description to fit terminal
+            if len(description) > desc_max_width:
+                description = description[:desc_max_width - 3] + "..."
+            # Replace newlines with spaces for single-line display
+            description = description.replace("\n", " ").strip()
+
+            # Build output using Text object to avoid Rich markup parsing issues
+            # with problematic Unicode characters
+            line = Text()
+            line.append(f"  #{link_id:<5} ", style="cyan")
+            # Add name as link, then padding separately
+            name_style = f"italic link {link_ui_url}" if is_untitled else f"link {link_ui_url}"
+            line.append(name, style=name_style)
+            padding = " " * (link_name_max - len(name))
+            line.append(padding)
+            if description:
+                line.append(f" {description}", style="dim")
+            console.print(line)
+        console.print()  # Empty line between collections
+
+
 def remove_duplicates(base_url: str, token: str, dry_run: bool = False) -> None:
     """Fetch all links across all collections, find duplicates, and remove them."""
     action_word = "[DRY RUN] " if dry_run else ""
@@ -653,6 +735,15 @@ def main():
         help="Limit number of links to update (0 = no limit)",
     )
 
+    # list command
+    list_parser = subparsers.add_parser("list", help="List all links grouped by collection")
+    list_parser.add_argument(
+        "--collection",
+        type=int,
+        default=None,
+        help="Filter to specific collection ID",
+    )
+
     # remove-duplicates command
     dup_parser = subparsers.add_parser("remove-duplicates", help="Find and remove duplicate links across all collections")
     dup_parser.add_argument(
@@ -707,6 +798,8 @@ def main():
             dry_run=args.dry_run,
             limit=args.limit,
         )
+    elif args.command == "list":
+        list_links(base_url, token, collection_id=args.collection)
     elif args.command == "remove-duplicates":
         remove_duplicates(base_url, token, dry_run=args.dry_run)
 
