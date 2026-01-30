@@ -9,9 +9,8 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 from rich.console import Console
-from rich.table import Table
 
-console = Console()
+console = Console(highlight=False)
 
 
 def clean_text(text: str) -> str:
@@ -19,7 +18,7 @@ def clean_text(text: str) -> str:
     # Replace tabs with spaces
     text = text.replace('\t', ' ')
     # Remove space after opening quotes (but not newlines)
-    text = re.sub(r'(["\„\"]) +', r'\1', text)
+    text = re.sub(r'(["„‟]) +', r'\1', text)
     # Remove space before punctuation
     text = re.sub(r' +([.,;:!?])', r'\1', text)
     # Normalize multiple spaces
@@ -73,7 +72,7 @@ def html_to_markdown(element) -> str:
     text = "".join(parts)
     # Clean up but preserve newlines
     text = text.replace('\t', ' ')               # tabs to spaces
-    text = re.sub(r'(["\„\"]) +', r'\1', text)   # space after opening quote
+    text = re.sub(r'(["„‟]) +', r'\1', text)   # space after opening quote
     text = re.sub(r' +([.,;:!?])', r'\1', text)  # space before punctuation
     text = re.sub(r' +', ' ', text)              # multiple spaces
     text = re.sub(r'\n +', '\n', text)           # leading spaces on lines
@@ -96,8 +95,8 @@ def scrape_newsletter(url: str) -> tuple[dict, list[dict]]:
     if title_tag:
         title = title_tag.get_text(strip=True)
         # Remove common prefixes: [#uN], emojis, question marks, etc.
-        title = re.sub(r'^\[#uN\]\s*', '', title)
-        title = re.sub(r'^[🌀\?\s]+', '', title)
+        title = re.sub(r'^\[#uN]\s*', '', title)
+        title = re.sub(r'^[🌀?\s]+', '', title)
         title = title.strip()
 
     # Extract date from og:image URL (e.g., https://img.unknow.news/og/20260123.png)
@@ -302,61 +301,48 @@ def crawl_newsletters(
     # Load successfully scraped URLs from previous runs
     scraped_urls = load_scraped_urls(output_dir)
     initial_count = len(scraped_urls)
-    console.print(f"[bold]Existing newsletters:[/bold] [cyan]{initial_count}[/cyan]")
-    console.print(f"[bold]Max to fetch:[/bold] [cyan]{max_total}[/cyan]")
 
     # seen = scraped + processed this run (prevents queue duplicates and re-fetching)
     seen = scraped_urls.copy()
     queue = deque([start_url])
     scraped_count = 0
 
-    console.print(f"\n[bold]Crawling newsletters...[/bold]")
+    with console.status("Fetching...", spinner="dots") as status:
+        while queue and scraped_count < max_total:
+            url = queue.popleft()
 
-    while queue and scraped_count < max_total:
-        url = queue.popleft()
+            if url in seen:
+                continue
+            seen.add(url)
 
-        if url in seen:
-            continue
-        seen.add(url)
+            try:
+                newsletter, previous = scrape_newsletter(url)
 
-        try:
-            console.print(f"  [dim]Fetching:[/dim] {url[:60]}...", end=" ")
-            newsletter, previous = scrape_newsletter(url)
+                # Add previous newsletters to queue for discovery
+                for prev in previous:
+                    if prev["url"] not in seen:
+                        queue.append(prev["url"])
 
-            # Add previous newsletters to queue for discovery
-            new_discovered = 0
-            for prev in previous:
-                if prev["url"] not in seen:
-                    queue.append(prev["url"])
-                    new_discovered += 1
+                newsletter["url"] = url
+                append_newsletter(newsletter, output_dir)
+                scraped_urls.add(url)
+                scraped_count += 1
 
-            newsletter["url"] = url
-            console.print(f"[green]OK[/green]")
+                # Show newsletter
+                title = newsletter['title'][:50] + "..." if len(newsletter['title']) > 50 else newsletter['title']
+                console.print(f"  [green]+[/green] {newsletter['date']}  [bold]{title}[/bold]")
 
-            # Show newsletter details
-            title_display = newsletter['title'][:50] + "..." if len(newsletter['title']) > 50 else newsletter['title']
-            console.print(f"    [cyan]{newsletter['date']}[/cyan] | {title_display}")
-            console.print(f"    [dim]Links:[/dim] [green]{len(newsletter['links'])}[/green]", end="")
-            if new_discovered:
-                console.print(f" | [dim]Discovered:[/dim] [yellow]{new_discovered}[/yellow] previous editions", end="")
-            console.print()
-
-            append_newsletter(newsletter, output_dir)
-            scraped_urls.add(url)
-            scraped_count += 1
-
-        except Exception as e:
-            console.print(f"[red]ERROR[/red]")
-            console.print(f"    [red]{e}[/red]")
-            continue
+            except Exception as e:
+                console.print(f"  [red]![/red] {url[-40:]}  [dim]{e}[/dim]")
 
     # Save updated scraped URLs
     save_scraped_urls(scraped_urls, output_dir)
 
-    # Summary
-    console.print(f"\n[bold]=== Summary ===[/bold]")
-    console.print(f"  [green]New:[/green] {scraped_count}")
-    console.print(f"  [bold]Total:[/bold] {len(scraped_urls)}")
+    # Summary line
+    if scraped_count:
+        console.print(f"\n[green]Scraped {scraped_count} new[/green] ({len(scraped_urls)} total)")
+    else:
+        console.print(f"\n[dim]No new newsletters[/dim] ({len(scraped_urls)} total)")
 
     return scraped_count
 
@@ -370,14 +356,12 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum newsletters to fetch (default: 10)")
     args = parser.parse_args()
 
+    console.print("[bold]unknow.news[/bold] scraper\n")
+
     if args.url:
         start_url = args.url
-        console.print(f"[bold]Starting URL:[/bold] {start_url}")
     else:
-        console.print("[dim]Fetching latest newsletter URL...[/dim]", end=" ")
-        start_url = get_latest_newsletter_url()
-        console.print(f"[green]OK[/green]")
-        console.print(f"[bold]Starting URL:[/bold] {start_url}")
+        with console.status("Finding latest...", spinner="dots"):
+            start_url = get_latest_newsletter_url()
 
-    console.print()
     crawl_newsletters(start_url, max_total=args.limit)
