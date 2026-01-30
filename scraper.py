@@ -301,32 +301,31 @@ def crawl_newsletters(
     scraped_urls = load_scraped_urls(output_dir)
     initial_count = len(scraped_urls)
     if initial_count:
-        print(f"Found {initial_count} existing newsletters, fetching up to {max_total} total...")
+        print(f"Found {initial_count} existing newsletters, fetching up to {max_total}...")
 
     # Queue of URLs to scrape, visited tracks URLs we've processed this run
     queue = deque([start_url])
     visited = set()
     scraped_count = 0
 
-    while queue and (initial_count + scraped_count) < max_total:
+    while queue and scraped_count < max_total:
         url = queue.popleft()
 
         if url in visited:
             continue
         visited.add(url)
 
-        already_scraped = url in scraped_urls
+        # Skip already scraped URLs entirely (no HTTP request needed)
+        if url in scraped_urls:
+            continue
 
         try:
             newsletter, previous = scrape_newsletter(url)
 
-            # Add previous newsletters to queue (even if current is already scraped)
+            # Add previous newsletters to queue for discovery
             for prev in previous:
                 if prev["url"] not in visited:
                     queue.append(prev["url"])
-
-            if already_scraped:
-                continue
 
             newsletter["url"] = url
             print(f"Scraping: {newsletter['date']} - {newsletter['title'][:50]}...")
@@ -351,7 +350,7 @@ if __name__ == "__main__":
     load_dotenv()
     parser = argparse.ArgumentParser(description="Crawl unknownews newsletters")
     parser.add_argument("url", nargs="?", help="Starting newsletter URL (default: latest from unknow.news)")
-    parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum total newsletters (default: 10)")
+    parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum newsletters to fetch (default: 10)")
     args = parser.parse_args()
 
     if args.url:
