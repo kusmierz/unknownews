@@ -422,6 +422,14 @@ def list_links(base_url: str, token: str, collection_id: int | None = None) -> N
             console.print(line)
         console.print()  # Empty line between collections
 
+    # Check for duplicates
+    exact_groups, fuzzy_groups = find_duplicates(links)
+    total_duplicates = sum(len(g["links"]) - 1 for g in exact_groups + fuzzy_groups)
+    if total_duplicates > 0:
+        console.print(f"[yellow]Found {total_duplicates} duplicate links.[/yellow]")
+        console.print("[dim]Run 'python linkwarden_sync.py remove-duplicates --dry-run' to preview removal[/dim]")
+        console.print("[dim]Run 'python linkwarden_sync.py remove-duplicates' to remove them[/dim]")
+
 
 def remove_duplicates(base_url: str, token: str, dry_run: bool = False) -> None:
     """Fetch all links across all collections, find duplicates, and remove them."""
