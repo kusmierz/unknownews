@@ -37,6 +37,8 @@ from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
 
+console = Console(highlight=False)
+
 # Colors for tags (visually distinct, readable on dark backgrounds)
 TAG_COLORS = [
     "bright_magenta", "bright_cyan", "bright_green", "bright_yellow",
@@ -49,8 +51,6 @@ def get_tag_color(tag_name: str) -> str:
     """Get a consistent color for a tag based on its name."""
     tag_hash = int(hashlib.md5(tag_name.encode()).hexdigest(), 16)
     return TAG_COLORS[tag_hash % len(TAG_COLORS)]
-
-console = Console()
 
 # Tracking params to always strip from URLs
 TRACKING_PARAMS = {
@@ -106,26 +106,35 @@ def filter_query_params(query: str, keep_only: set[str] | None = None) -> str:
     return "&".join(filtered)
 
 
-def show_diff(old: str, new: str, indent: str = "      ") -> None:
+def show_diff(old: str, new: str, indent: str = "      ", muted: bool = False) -> None:
     """Show diff with highlighted changes using rich."""
     matcher = difflib.SequenceMatcher(None, old, new)
 
+    if muted:
+        old_style, new_style = "dim red", "dim green"
+        old_hl, new_hl = "red", "green"
+        eq_style = "dim"
+    else:
+        old_style, new_style = "red", "green"
+        old_hl, new_hl = "bold red on dark_red", "bold green on dark_green"
+        eq_style = None
+
     old_text = Text()
-    old_text.append(f"{indent}- ", style="red")
+    old_text.append(f"{indent}- ", style=old_style)
     new_text = Text()
-    new_text.append(f"{indent}+ ", style="green")
+    new_text.append(f"{indent}+ ", style=new_style)
 
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
-            old_text.append(old[i1:i2])
-            new_text.append(new[j1:j2])
+            old_text.append(old[i1:i2], style=eq_style)
+            new_text.append(new[j1:j2], style=eq_style)
         elif tag == "replace":
-            old_text.append(old[i1:i2], style="bold red on dark_red")
-            new_text.append(new[j1:j2], style="bold green on dark_green")
+            old_text.append(old[i1:i2], style=old_hl)
+            new_text.append(new[j1:j2], style=new_hl)
         elif tag == "delete":
-            old_text.append(old[i1:i2], style="bold red on dark_red")
+            old_text.append(old[i1:i2], style=old_hl)
         elif tag == "insert":
-            new_text.append(new[j1:j2], style="bold green on dark_green")
+            new_text.append(new[j1:j2], style=new_hl)
 
     console.print(old_text)
     console.print(new_text)
@@ -252,21 +261,22 @@ def fetch_all_collections(base_url: str, token: str) -> list[dict]:
     return data.get("response", [])
 
 
-def fetch_all_links(base_url: str, token: str) -> list[dict]:
+def fetch_all_links(base_url: str, token: str, silent: bool = False) -> list[dict]:
     """Fetch all links from all collections."""
     collections = fetch_all_collections(base_url, token)
     all_links = []
+
     for collection in collections:
         collection_id = collection["id"]
         collection_name = collection.get("name", f"Collection {collection_id}")
         collection_url = f"{base_url}/collections/{collection_id}"
-        console.print(f"  Fetching [{collection_id:3} # [cyan][link={collection_url}]{collection_name}[/link][/cyan]]... ", end="")
         links = fetch_collection_links(base_url, collection_id, token)
-        # Add collection info to each link for reporting
         for link in links:
             link["_collection_name"] = collection_name
         all_links.extend(links)
-        console.print(f"[green]{len(links)}[/green] links")
+        if not silent:
+            console.print(f"  [dim][link={collection_url}]{collection_name}[/link][/dim] [green]{len(links)}[/green]")
+
     return all_links
 
 
@@ -309,51 +319,6 @@ def find_duplicates(links: list[dict]) -> tuple[list[dict], list[dict]]:
     return exact_groups, fuzzy_groups
 
 
-def print_duplicate_report(exact_groups: list[dict], fuzzy_groups: list[dict], total_links: int, base_url: str, dry_run: bool = False) -> None:
-    """Display duplicate groups showing which links will be kept vs deleted."""
-    exact_dup_count = sum(len(g["links"]) for g in exact_groups)
-    fuzzy_dup_count = sum(len(g["links"]) for g in fuzzy_groups)
-    total_to_delete = sum(len(g["links"]) - 1 for g in exact_groups + fuzzy_groups)
-
-    # Summary statistics
-    action_word = "Would delete" if dry_run else "Will delete"
-    console.print("\n[bold]=== Duplicate Report ===[/bold]")
-    console.print(f"Total links:      {total_links}")
-    console.print(f"Exact duplicates: [red]{exact_dup_count}[/red] links in [red]{len(exact_groups)}[/red] groups")
-    console.print(f"Fuzzy duplicates: [yellow]{fuzzy_dup_count}[/yellow] links in [yellow]{len(fuzzy_groups)}[/yellow] groups")
-    console.print(f"{action_word}:    [bold red]{total_to_delete}[/bold red] links (keeping oldest in each group)")
-
-    if not exact_groups and not fuzzy_groups:
-        console.print("\n[green]No duplicates found![/green]")
-        return
-
-    # Display both exact and fuzzy groups
-    sections = [
-        (exact_groups, "Exact Duplicates", "normalized_url", "red"),
-        (fuzzy_groups, "Fuzzy Duplicates", "path_key", "yellow"),
-    ]
-    for groups, title, key_field, color in sections:
-        if not groups:
-            continue
-        console.print(f"\n[bold {color}]--- {title} ---[/bold {color}]")
-        for i, group in enumerate(groups, 1):
-            links = sorted(group["links"], key=lambda x: x.get("id", 0))
-            console.print(f"\n[bold][{i}][/bold] {group[key_field]} ([{color}]{len(links)} links[/{color}])")
-            first_url = links[0].get("url", "") if links else ""
-            for j, link in enumerate(links):
-                link_id = link.get("id", "?")
-                name = link.get("name", "Untitled")[:60]
-                collection = link.get("_collection_name", "?")
-                link_url = link.get("url", "")
-                link_ui_url = f"{base_url}/preserved/{link_id}?format=4"
-                if j == 0:
-                    console.print(f"    [green]KEEP[/green]   # {link_id:5} | [{collection}] | [link={link_ui_url}]{name}[/link]")
-                else:
-                    console.print(f"    [red]DELETE[/red] # {link_id:5} | [{collection}] | [link={link_ui_url}]{name}[/link]")
-                    if link_url != first_url:
-                        show_diff(first_url, link_url, indent="           ")
-
-
 def delete_link(base_url: str, link_id: int, token: str) -> bool:
     """Delete a link from Linkwarden."""
     headers = {"Authorization": f"Bearer {token}"}
@@ -365,149 +330,137 @@ def delete_link(base_url: str, link_id: int, token: str) -> bool:
 def list_links(base_url: str, token: str, collection_id: int | None = None) -> None:
     """List all links grouped by collection."""
     # Fetch links
-    if collection_id is not None:
-        console.print(f"Fetching links from collection #{collection_id}...")
-        links = fetch_collection_links(base_url, collection_id, token)
-        # Add collection info manually since fetch_collection_links doesn't include it
-        collections = fetch_all_collections(base_url, token)
-        collection_name = next(
-            (c.get("name", f"Collection {collection_id}") for c in collections if c["id"] == collection_id),
-            f"Collection {collection_id}"
-        )
-        for link in links:
-            link["_collection_name"] = collection_name
-    else:
-        console.print("Fetching links from all collections...")
-        links = fetch_all_links(base_url, token)
-
-    console.print(f"\nTotal: [bold]{len(links)}[/bold] links\n")
+    with console.status("Fetching...", spinner="dots"):
+        if collection_id is not None:
+            links = fetch_collection_links(base_url, collection_id, token)
+            collections = fetch_all_collections(base_url, token)
+            collection_name = next(
+                (c.get("name", f"Collection {collection_id}") for c in collections if c["id"] == collection_id),
+                f"Collection {collection_id}"
+            )
+            for link in links:
+                link["_collection_name"] = collection_name
+        else:
+            links = fetch_all_links(base_url, token, silent=True)
 
     if not links:
-        console.print("[yellow]No links found.[/yellow]")
+        console.print("[dim]No links found.[/dim]")
         return
 
     # Group links by collection
     by_collection = defaultdict(list)
     for link in links:
-        collection_name = link.get("_collection_name", "Unknown")
-        by_collection[collection_name].append(link)
+        by_collection[link.get("_collection_name", "Unknown")].append(link)
 
-    # Calculate available widths
+    # Calculate widths
     terminal_width = shutil.get_terminal_size().columns or 120
-    # Line 1: "  #12345 Link Name  [tags]" - name can be generous
-    link_name_max = int(min(80, terminal_width - 30))  # Leave room for ID and tags
-    # Line 2: "         Description..." - indent is 9 spaces
-    desc_max_width = terminal_width - 10  # 9 for indent + 1 buffer
+    name_max = min(70, terminal_width - 25)
+    desc_max = terminal_width - 12
 
-    # Display links grouped by collection
-    for collection_name, collection_links in sorted(by_collection.items()):
-        collection_url = f"{base_url}/collections/{collection_id}"
-        console.print(f"[bold][[link={collection_url}]{escape(collection_name)}[/link] ({len(collection_links)} links)][/bold]")
-        for link in sorted(collection_links, key=lambda x: x.get("id", 0)):
+    # Display links
+    for coll_name, coll_links in sorted(by_collection.items()):
+        coll_id = coll_links[0].get("collectionId", collection_id)
+        coll_url = f"{base_url}/collections/{coll_id}"
+        console.print(f"\n[bold][link={coll_url}]{escape(coll_name)}[/link][/bold] [dim]({len(coll_links)})[/dim]")
+
+        for link in sorted(coll_links, key=lambda x: x.get("id", 0)):
             link_id = link.get("id", "?")
-            name = (link.get("name") or "").strip()
-            is_untitled = not name or name == "Just a moment..."
-            if is_untitled:
+            name = (link.get("name") or "").strip() or "Untitled"
+            if name == "Just a moment...":
                 name = "Untitled"
-            description = link.get("description", "") or ""
+            desc = (link.get("description") or "").replace("\n", " ").strip()
             tags = [t.get("name", "") for t in link.get("tags", []) if t.get("name")]
-            link_ui_url = f"{base_url}/preserved/{link_id}?format=4"
+            link_url = f"{base_url}/preserved/{link_id}?format=4"
 
-            # Truncate name if too long
-            if len(name) > link_name_max:
-                name = name[:link_name_max - 3] + "..."
+            if len(name) > name_max:
+                name = name[:name_max - 3] + "..."
+            if len(desc) > desc_max:
+                desc = desc[:desc_max - 3] + "..."
 
-            # Truncate description to fit terminal
-            if len(description) > desc_max_width:
-                description = description[:desc_max_width - 3] + "..."
-            # Replace newlines with spaces for single-line display
-            description = description.replace("\n", " ").strip()
-
-            # Line 1: ID, name, tags
-            line1 = Text()
-            line1.append(f"  #{link_id:<5} ", style="cyan")
-            name_style = f"italic link {link_ui_url}" if is_untitled else f"link {link_ui_url}"
-            line1.append(name, style=name_style)
+            # Name line with tags
+            line = Text()
+            line.append(f"  #{link_id:<5} ", style="dim")
+            line.append(name, style=f"link {link_url}")
             if tags:
-                line1.append("  ")
-                for i, tag in enumerate(tags):
-                    if i > 0:
-                        line1.append(" ")
-                    line1.append(f"[{tag}]", style=f"dim {get_tag_color(tag)}")
-            console.print(line1)
+                line.append("  ")
+                for tag in tags:
+                    line.append(f"[{tag}] ", style=f"dim {get_tag_color(tag)}")
+            console.print(line)
 
-            # Line 2: description (indented)
-            if description:
-                line2 = Text()
-                line2.append("         ")  # Align with name (9 spaces)
-                line2.append(description, style="dim")
-                console.print(line2)
+            if desc:
+                console.print(f"            [dim]{desc}[/dim]")
 
-            console.print()  # Empty line between links
-        console.print()  # Extra line between collections
+    # Summary
+    console.print(f"\n[bold]{len(links)}[/bold] links total")
 
-    # Check for duplicates
+    # Duplicates hint
     exact_groups, fuzzy_groups = find_duplicates(links)
-    total_duplicates = sum(len(g["links"]) - 1 for g in exact_groups + fuzzy_groups)
-    if total_duplicates > 0:
-        console.print(f"[yellow]Found {total_duplicates} duplicate links.[/yellow]")
-        console.print("[dim]Run 'python linkwarden_sync.py remove-duplicates --dry-run' to preview removal[/dim]")
-        console.print("[dim]Run 'python linkwarden_sync.py remove-duplicates' to remove them[/dim]")
+    total_dups = sum(len(g["links"]) - 1 for g in exact_groups + fuzzy_groups)
+    if total_dups > 0:
+        console.print(f"[yellow]{total_dups} duplicates[/yellow] [dim]- run `remove-duplicates` to clean up[/dim]")
 
 
 def remove_duplicates(base_url: str, token: str, dry_run: bool = False) -> None:
     """Fetch all links across all collections, find duplicates, and remove them."""
-    action_word = "[DRY RUN] " if dry_run else ""
-    console.print(f"{action_word}Finding and removing duplicates across all collections...")
-    console.print("Fetching collections...")
+    dry_label = "[dim](dry-run)[/dim] " if dry_run else ""
 
-    all_links = fetch_all_links(base_url, token)
-    console.print(f"\nTotal: [bold]{len(all_links)}[/bold] links")
+    with console.status("Fetching...", spinner="dots"):
+        all_links = fetch_all_links(base_url, token, silent=True)
 
     exact_groups, fuzzy_groups = find_duplicates(all_links)
+    total_to_delete = sum(len(g["links"]) - 1 for g in exact_groups + fuzzy_groups)
 
-    # Display what will be kept/deleted
-    print_duplicate_report(exact_groups, fuzzy_groups, len(all_links), base_url, dry_run=dry_run)
+    console.print(f"[bold]{len(all_links)}[/bold] links, [red]{len(exact_groups)}[/red] exact + [yellow]{len(fuzzy_groups)}[/yellow] fuzzy duplicate groups\n")
 
     if not exact_groups and not fuzzy_groups:
+        console.print("[green]No duplicates found.[/green]")
         return
 
-    # Collect all links to delete (all but the oldest in each group)
+    # Show duplicate groups with details
+    all_groups = [("exact", g) for g in exact_groups] + [("fuzzy", g) for g in fuzzy_groups]
+
+    for match_type, group in all_groups:
+        links = sorted(group["links"], key=lambda x: x.get("id", 0))
+        key = group.get("normalized_url") or group.get("path_key", "")
+        emoji = "🎯" if match_type == "exact" else "🔍"
+
+        console.print(f"{emoji} [blue][link={key}]{key[:70]}[/link][/blue]")
+
+        first_url = links[0].get("url", "")
+        for i, link in enumerate(links):
+            link_id = link.get("id", "?")
+            name = link.get("name", "Untitled")[:55]
+            coll = link.get("_collection_name", "?")
+            link_url = link.get("url", "")
+            ui_url = f"{base_url}/preserved/{link_id}?format=4"
+
+            if i == 0:
+                console.print(f"  [green]keep[/green]   #{link_id:<5} [link={ui_url}]{name}[/link] [dim][{coll}][/dim]")
+            else:
+                console.print(f"  [red]delete[/red] #{link_id:<5} [link={ui_url}]{name}[/link] [dim][{coll}][/dim]")
+                if link_url != first_url:
+                    show_diff(first_url, link_url, indent="         ", muted=True)
+        console.print()
+
+    # Confirm and delete
     links_to_delete = []
     for group in exact_groups + fuzzy_groups:
         sorted_links = sorted(group["links"], key=lambda x: x.get("id", 0))
-        # Keep the first (oldest) link, delete the rest
         links_to_delete.extend(sorted_links[1:])
 
-    if not links_to_delete:
-        return
-
-    # Delete duplicates
-    console.print(f"\n{action_word}Deleting {len(links_to_delete)} duplicate links...")
-    deleted = 0
-    errors = 0
-
-    for link in links_to_delete:
-        link_id = link.get("id")
-        link_url = link.get("url", "")
-        collection = link.get("_collection_name", "?")
-
-        if dry_run:
-            console.print(f"  [dim]Would delete[/dim] # {link_id:5} | [{collection}] | {link_url[:60]}")
-        else:
-            try:
-                delete_link(base_url, link_id, token)
-                console.print(f"  [red]Deleted[/red] # {link_id:5} | [{collection}] | {link_url[:60]}")
-                deleted += 1
-            except Exception as e:
-                console.print(f"  [bold red]Error deleting ID {link_id:5}:[/bold red] {e}")
-                errors += 1
-
-    # Summary
-    console.print(f"\n[bold]{action_word}Summary:[/bold]")
-    console.print(f"  [red]Deleted: {deleted}[/red]")
-    if errors:
-        console.print(f"  [bold red]Errors: {errors}[/bold red]")
+    if not dry_run:
+        deleted = 0
+        errors = 0
+        with console.status("Deleting...", spinner="dots"):
+            for link in links_to_delete:
+                try:
+                    delete_link(base_url, link.get("id"), token)
+                    deleted += 1
+                except Exception:
+                    errors += 1
+        console.print(f"[red]{deleted} deleted[/red]" + (f", [red]{errors} errors[/red]" if errors else ""))
+    else:
+        console.print(f"{dry_label}[red]{total_to_delete}[/red] would be deleted")
 
 
 def update_link(
@@ -563,25 +516,33 @@ def sync_links(
     collection_id: int | None = None,
     dry_run: bool = False,
     limit: int = 0,
+    show_unmatched: bool = False,
 ) -> None:
     """Main sync logic: match URLs and update Linkwarden.
 
     If collection_id is None, syncs all collections.
     """
+    # Show scope
+    if collection_id is not None:
+        collections = fetch_all_collections(base_url, token)
+        coll_name = next((c.get("name") for c in collections if c["id"] == collection_id), f"#{collection_id}")
+        coll_url = f"{base_url}/collections/{collection_id}"
+        console.print(f"Collection: [bold][link={coll_url}]{coll_name}[/link][/bold]\n")
+    else:
+        console.print("[dim]All collections[/dim]\n")
+
     # Load newsletter index
-    console.print(f"Loading newsletter index from {jsonl_path}...")
-    newsletter_index, newsletter_fuzzy_index = load_newsletter_index(jsonl_path)
-    console.print(f"  Indexed {len(newsletter_index)} unique links from newsletters")
+    with console.status("Loading index...", spinner="dots"):
+        newsletter_index, newsletter_fuzzy_index = load_newsletter_index(jsonl_path)
 
     # Fetch Linkwarden links
-    if collection_id is not None:
-        console.print(f"\nFetching links from collection #{collection_id}...")
-        linkwarden_links = fetch_collection_links(base_url, collection_id, token)
-        console.print(f"  Fetched {len(linkwarden_links)} links")
-    else:
-        console.print("\nFetching links from all collections...")
-        linkwarden_links = fetch_all_links(base_url, token)
-        console.print(f"\nTotal: [bold]{len(linkwarden_links)}[/bold] links")
+    with console.status("Fetching links...", spinner="dots"):
+        if collection_id is not None:
+            linkwarden_links = fetch_collection_links(base_url, collection_id, token)
+        else:
+            linkwarden_links = fetch_all_links(base_url, token, silent=True)
+
+    console.print(f"[bold]{len(linkwarden_links)}[/bold] links, [bold]{len(newsletter_index)}[/bold] indexed")
 
     # Match and prepare updates
     matches = []
@@ -612,127 +573,106 @@ def sync_links(
 
     exact_count = sum(1 for m in matches if m["match_type"] == "exact")
     fuzzy_count = sum(1 for m in matches if m["match_type"] == "fuzzy")
-    console.print(f"\n[green]Exact: {exact_count}[/green] | [cyan]Fuzzy: {fuzzy_count}[/cyan] | [yellow]Unmatched: {len(unmatched_urls)}[/yellow]")
+    console.print(f"Matched: [green]{exact_count}[/green] exact, [cyan]{fuzzy_count}[/cyan] fuzzy, [dim]{len(unmatched_urls)} unmatched[/dim]\n")
 
     if not matches:
-        print("No matches found. Nothing to update.")
-    else:
-        # Process updates
-        print(f"\n{'[DRY RUN] ' if dry_run else ''}Processing updates...\n")
-        updated = 0
-        skipped = 0
+        console.print("[dim]Nothing to update.[/dim]")
+        return
 
-        for match in matches:
-            lw_link = match["linkwarden"]
-            nl_data = match["newsletter"]
-            match_type = match["match_type"]
+    # Process updates
+    updated = 0
+    skipped = 0
+    dry_label = "[dim](dry-run)[/dim] " if dry_run else ""
 
-            link_id = lw_link.get("id")
-            link_name = lw_link.get("name", "Untitled")
-            link_url = lw_link.get("url", "")
-            normalized_url = normalize_url(link_url)
-            existing_desc = lw_link.get("description", "") or ""
-            existing_tags = {tag.get("name", "") for tag in lw_link.get("tags", [])}
+    for match in matches:
+        lw_link = match["linkwarden"]
+        nl_data = match["newsletter"]
+        match_type = match["match_type"]
 
-            nl_title = nl_data.get("title", "")
-            nl_description = nl_data.get("description", "")
-            nl_date = nl_data.get("date", "")
-            nl_link = nl_data.get("original_url", "")
+        link_id = lw_link.get("id")
+        link_name = lw_link.get("name", "Untitled")
+        link_url = lw_link.get("url", "")
+        normalized_url = normalize_url(link_url)
+        existing_desc = lw_link.get("description", "") or ""
+        existing_tags = {tag.get("name", "") for tag in lw_link.get("tags", [])}
 
-            # Prepare tags
-            tags_to_add = ["unknow"]
-            if nl_date:
-                tags_to_add.append(nl_date)
+        nl_title = nl_data.get("title", "")
+        nl_description = nl_data.get("description", "")
+        nl_date = nl_data.get("date", "")
+        nl_link = nl_data.get("original_url", "")
 
-            # Check what needs updating
-            new_tags = [t for t in tags_to_add if t not in existing_tags]
-            description_needs_update = nl_description and nl_description not in existing_desc
-            # Name needs update only if newsletter title exists, differs from current name,
-            # and the current name doesn't already start with the newsletter title (already synced)
-            name_needs_update = (
-                nl_title
-                and link_name
-                and link_name != nl_title
-                and not link_name.startswith(nl_title)
-            )
-            # URL needs update if normalized version differs from current
-            url_needs_update = normalized_url and normalized_url != link_url
+        # Prepare tags
+        tags_to_add = ["unknow"]
+        if nl_date:
+            tags_to_add.append(nl_date)
 
-            if not new_tags and not description_needs_update and not name_needs_update and not url_needs_update:
-                skipped += 1
-                continue
+        # Check what needs updating
+        new_tags = [t for t in tags_to_add if t not in existing_tags]
+        description_needs_update = nl_description and nl_description not in existing_desc
+        name_needs_update = (
+            nl_title
+            and link_name
+            and link_name != nl_title
+            and not link_name.startswith(nl_title)
+        )
+        url_needs_update = normalized_url and normalized_url != link_url
 
-            # Prepare new description (append to existing)
-            if description_needs_update:
-                if existing_desc:
-                    new_description = f"{nl_description}\n\n---\n{existing_desc}"
-                else:
-                    new_description = nl_description
+        if not new_tags and not description_needs_update and not name_needs_update and not url_needs_update:
+            skipped += 1
+            continue
+
+        # Prepare updates
+        if description_needs_update:
+            new_description = f"{nl_description}\n\n---\n{existing_desc}" if existing_desc else nl_description
+        else:
+            new_description = existing_desc
+
+        new_name = f"{nl_title} [{link_name}]" if name_needs_update else link_name
+        new_url = normalized_url if url_needs_update else link_url
+
+        # Show update
+        fuzzy_label = " [cyan]~[/cyan]" if match_type == "fuzzy" else ""
+        console.print(f"{dry_label}[green]+[/green] #{link_id}{fuzzy_label}  [bold]{link_name[:50]}[/bold]")
+
+        if name_needs_update:
+            show_diff(link_name, new_name, indent="    ")
+        if url_needs_update:
+            show_diff(link_url, new_url, indent="    ")
+        if new_tags:
+            console.print(f"    [green]+ tags: {', '.join(new_tags)}[/green]")
+        extra_tags = existing_tags - set(tags_to_add) - {"unknow"}
+        if extra_tags:
+            console.print(f"    [dim]  tags: {', '.join(sorted(extra_tags))}[/dim]")
+        if description_needs_update:
+            if existing_desc:
+                old_desc = existing_desc[:60] + "..." if len(existing_desc) > 60 else existing_desc
+                new_desc = nl_description[:60] + "..." if len(nl_description) > 60 else nl_description
+                show_diff(old_desc, new_desc, indent="    ")
             else:
-                new_description = existing_desc
+                desc_preview = nl_description[:60] + "..." if len(nl_description) > 60 else nl_description
+                console.print(f"    [green]+ desc: {desc_preview}[/green]")
 
-            # Determine the new name (newsletter title + original name in brackets)
-            if name_needs_update:
-                new_name = f"{nl_title} [{link_name}]"
-            else:
-                new_name = link_name
+        # Perform update
+        try:
+            update_link(base_url, lw_link, new_name, new_url, new_description, tags_to_add, token, dry_run=dry_run)
+            updated += 1
+        except Exception as e:
+            console.print(f"    [red]! {e}[/red]")
 
-            # Determine the new URL (normalized)
-            new_url = normalized_url if url_needs_update else link_url
+        if limit > 0 and updated >= limit:
+            console.print(f"\n[dim]Limit of {limit} reached.[/dim]")
+            break
 
-            # Log the update
-            match_label = " [cyan](fuzzy match)[/cyan]" if match_type == "fuzzy" else ""
-            console.print(f"  [bold]Link # {link_id:5}[/bold]{match_label}")
-            if name_needs_update:
-                console.print("    [cyan]name:[/cyan]")
-                show_diff(link_name, new_name)
-            if match_type == "fuzzy":
-                console.print("    [cyan]matched url:[/cyan]")
-                show_diff(link_url, nl_link)
-            if url_needs_update:
-                console.print("    [cyan]url:[/cyan]")
-                show_diff(link_url, new_url)
-            if new_tags:
-                console.print("    [cyan]tags:[/cyan]")
-                for tag in new_tags:
-                    console.print(f"      [green]+ {tag}[/green]")
-            if description_needs_update:
-                desc_preview = nl_description[:80] + "..." if len(nl_description) > 80 else nl_description
-                console.print("    [cyan]description:[/cyan]")
-                console.print(f"      [green]+ \"{desc_preview}\"[/green]")
-            console.print()
+    # Summary
+    console.print(f"\n{dry_label}[green]{updated} updated[/green], [dim]{skipped} skipped[/dim]")
 
-            # Perform update
-            try:
-                update_link(
-                    base_url,
-                    lw_link,
-                    new_name,
-                    new_url,
-                    new_description,
-                    tags_to_add,
-                    token,
-                    dry_run=dry_run,
-                )
-                updated += 1
-            except Exception as e:
-                console.print(f"    [red]Error updating: {e}[/red]")
-
-            # Check limit
-            if limit > 0 and updated >= limit:
-                console.print(f"  Reached limit of {limit} updates, stopping.")
-                break
-
-        # Summary
-        console.print(f"\n[bold]{'[DRY RUN] ' if dry_run else ''}Summary:[/bold]")
-        console.print(f"  [green]Updated: {updated}[/green]")
-        console.print(f"  [yellow]Skipped (already synced): {skipped}[/yellow]")
-
-    # Print unmatched URLs
     if unmatched_urls:
-        console.print(f"\n[bold]Unmatched Linkwarden URLs ({len(unmatched_urls)}):[/bold]")
-        for url in unmatched_urls:
-            console.print(f"  [yellow]{url}[/yellow]")
+        if show_unmatched:
+            console.print(f"\n[dim]Unmatched ({len(unmatched_urls)}):[/dim]")
+            for url in unmatched_urls:
+                console.print(f"  [dim]{url}[/dim]")
+        else:
+            console.print(f"\n[dim]{len(unmatched_urls)} unmatched (use --show-unmatched to list)[/dim]")
 
 
 def main():
@@ -765,6 +705,11 @@ def main():
         type=int,
         default=0,
         help="Limit number of links to update (0 = no limit)",
+    )
+    sync_parser.add_argument(
+        "--show-unmatched",
+        action="store_true",
+        help="Show all unmatched Linkwarden URLs",
     )
 
     # list command
@@ -808,6 +753,11 @@ def main():
         default=0,
         help="Limit number of links to update (0 = no limit)",
     )
+    parser.add_argument(
+        "--show-unmatched",
+        action="store_true",
+        help="Show all unmatched Linkwarden URLs",
+    )
 
     args = parser.parse_args()
 
@@ -820,8 +770,10 @@ def main():
         console.print("[red]Error: LINKWARDEN_TOKEN not set in environment[/red]")
         sys.exit(1)
 
-    # Default to sync for backward compatibility (when no subcommand given)
-    if args.command is None or args.command == "sync":
+    command = args.command or "sync"
+    console.print(f"[bold]linkwarden[/bold] {command}\n")
+
+    if command == "sync":
         sync_links(
             base_url=base_url,
             jsonl_path=args.jsonl,
@@ -829,10 +781,11 @@ def main():
             collection_id=args.collection,
             dry_run=args.dry_run,
             limit=args.limit,
+            show_unmatched=args.show_unmatched,
         )
-    elif args.command == "list":
+    elif command == "list":
         list_links(base_url, token, collection_id=args.collection)
-    elif args.command == "remove-duplicates":
+    elif command == "remove-duplicates":
         remove_duplicates(base_url, token, dry_run=args.dry_run)
 
 
