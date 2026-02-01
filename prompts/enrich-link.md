@@ -1,29 +1,47 @@
 # Zadanie
-1. Otwórz stronę pod podanym linkiem i zapoznaj się z jej treścią.
-2. Przygotuj wpis do newslettera UnknowNews składający się z tytułu, krótkiego opisu, listy tagów i kategorii.
-3. Zwróć wynik jako JSON.
+1. Spróbuj pobrać i przeczytać treść strony pod podanym linkiem (artykuł / wpis / opis filmu / transkrypt, jeśli jest na stronie).
+2. Jeśli treści NIE DA SIĘ rzetelnie pobrać lub przeczytać (np. błąd sieci, 403/404/5xx, paywall, wymaga logowania/JS, pusta strona, brak dostępu do treści, strona zwraca tylko shell, treść jest nieczytelna) — ZWRÓĆ dokładnie:
+   null
+3. Jeśli treść jest dostępna, przygotuj wpis w stylu UnknowNews: tytuł + krótki opis (INFO) + tagi + kategoria.
+4. Zwróć wynik jako JSON (bez markdown, bez komentarzy, bez dodatkowego tekstu).
 
-# Tytuł (pole "title")
+## Zasady anty-halucynacyjne (OBOWIĄZKOWE)
+- Opisuj WYŁĄCZNIE informacje jawnie obecne w treści strony.
+- Zabronione jest uzupełnianie luk wiedzą ogólną, kontekstem branżowym, „typowymi wnioskami" lub zgadywaniem.
+- Jeśli nie masz pewności, że dana informacja wynika z treści strony — POMIŃ ją.
+- Jeśli nie masz pewności co do całości (np. nie wiesz, o czym jest materiał poza tytułem) — ZWRÓĆ null.
+
+## Fazy pracy (wewnętrznie, nie wypisuj tych kroków)
+
+Krok 1: Ekstrakcja faktów z treści (temat, kontekst, kluczowe punkty, konkretne liczby/nazwy, forma materiału).
+Krok 2: Redakcja w stylu UnknowNews WYŁĄCZNIE na podstawie faktów z Kroku 1.
+Krok 3: Klasyfikacja (tagi + kategoria) na podstawie Kroku 1.
+
+## Tytuł (pole "title")
 - Twórz chwytliwy tytuł w języku polskim, złożony z jednego lub dwóch członów oddzielonych myślnikiem. Często używaj pytań lub zaskakujących stwierdzeń, które zachęcą do kliknięcia ("Dlaczego…?", "Czy…?", "Jak…?").
-- Jeśli materiał to film, podcast lub prezentacja, dodaj w nawiasie rodzaj i czas trwania, np. "(film, 21 m)", "(podcast, 58 min)". Czas odczytaj z opisu źródła.
 - Zamiast dosłownie tłumaczyć oryginalny tytuł, parafrazuj go tak, aby oddawał główny sens i brzmiał naturalnie po polsku.
+- Jeśli materiał to film, podcast lub prezentacja i czas trwania jest jawnie podany w treści strony (np. w opisie), dodaj w nawiasie rodzaj i czas trwania, np. "(film, 21 m)", "(podcast, 58 min)". Jeśli czasu nie ma w treści — nie zgaduj i nie dodawaj.
 
-# Opis (pole "description")
-- W 2–4 zdaniach streść najważniejsze elementy artykułu lub filmu.
-- W pierwszym zdaniu wyjaśnij kontekst i sedno materiału, używając konkretów (liczb, nazw technologii, nazw firm/instytucji) jeśli są obecne. Przykładowo: "Autor opisuje, jak przeniósł wszystkie usługi z AWS na serwery Hetznera, redukując koszty z 1400 do 120 dolarów".
-- W kolejnych zdaniach przedstaw kluczowe wątki, posługując się pytaniami ("Dlaczego…?", "Po co…?") lub enumeracjami w obrębie zdania. Zawsze odwołuj się do autora/filmu ("Autor pokazuje…", "Film wyjaśnia…"), a jeśli materiał prezentuje rozwiązania, podkreśl ich zalety i wady.
-- W przypadku bardziej rozbudowanych kwestii, skomplikowanych, instrukcji, granularnych, gdzie ciężko opisać to w jednym zdaniu, posłuż się uogólniem wyjaśniającym, np. "Autor podpowiada też, jak ustawić reguły automatycznego wywoływania tego narzędzia za każdym razem, gdy agent nie jest przekonany, jak coś wykonać."
-- Zachowaj lekki, czasem humorystyczny ton, jeśli wynika to z kontekstu, oraz staraj się tłumaczyć angielskie terminy na polski lub w prostych słowach wyjaśniać ich znaczenie.
-- Nie przekraczaj czterech zdań; gdy temat ma wiele wątków, łącz je w jedno zdanie lub używaj średników, aby zachować zwięzłość.
-- Nie powtarzaj informacji z tytułu: samego tytułu, długości wideo czy oczywistych rzeczy, zamiast "Film The Untold Story of Databases to krótkie wideo (ok. 15 minut) opowiadające o ewolucji baz danych" napisz "Film opowiada o ewolucji baz danych"
+## Opis (pole "description")
+- Napisz 2–4 zdania. Styl: jak w UnknowNews, zwięźle, konkretnie, zachęcająco.
+- Pierwsze zdanie: kontekst i sedno materiału (o czym jest i co wnosi), używając konkretów TYLKO jeśli są w treści (liczby, nazwy technologii, firm, narzędzi, zjawisk).
+- Kolejne zdania: najważniejsze wątki z materiału. Możesz użyć 1–2 pytań retorycznych ("Dlaczego…?", "Po co…?") tylko jeśli wynikają z treści i pasują do tonu.
+- Zawsze odwołuj się do źródła: "Autor opisuje…", "Autor pokazuje…", "Film wyjaśnia…", "W tekście znajdziesz…".
+- Jeśli materiał zawiera plusy/minusy, ograniczenia lub trade-offy — możesz je zasygnalizować. Jeśli nie ma ich w treści — pomiń (bez dopowiadania).
+- Gdy materiał jest prosty lub krótki, NIE próbuj dorównywać bogactwem opisu przykładom. Nie upiększaj, nie dokładaj sztucznych wątków, nie rozbudowuj na siłę.
+- Zachowaj lekki, czasem humorystyczny ton tylko jeśli wynika to z kontekstu materiału.
+- Nie powtarzaj informacji z tytułu (np. nie powtarzaj czasu trwania). Nie pisz oczywistości typu "to film o…" jeśli nic to nie wnosi.
 
-# Tagi (pole "tags")
-- Lista 2–6 słów kluczowych. Wybieraj rzeczowniki lub krótkie, proste frazy oddające najważniejsze tematy w języku polskim (ale też niezbyt ogólne), np. technologie, języki programowania czy branże poruszane w materiale.
-- Używaj raczej małych liter, bez odmiany.
-- Nie powtarzaj tagów związanych ze sobą nawzajem (uogólnij je do 1-2 zamiast tego) lub z kategorią, w której jest ten link (np. "AI", gdy link jest w kategorii AI lub "programowanie" gdy jest w "Software Development").
+## Tagi (pole "tags")
+- Lista 2–6 słów kluczowych w języku polskim: rzeczowniki lub krótkie, proste frazy, możliwe do wielokrotnego użycia w archiwum.
+- Używaj małych liter, bez odmiany (w miarę możliwości).
+- Unikaj tagów zbyt ogólnych i tagów jednorazowych/opisowych/emocjonalnych (np. "ciekawostki", "przemyślenia", "fajne").
+- Nie powtarzaj synonimów ani tagów bardzo bliskich znaczeniowo (uogólnij do 1–2 zamiast tego).
+- Nie powtarzaj tagu będącego nazwą kategorii (np. "ai" przy kategorii AI, "devops" przy Tech / Devops).
 
-# Kategoria (pole "category")
-Podaj dokładnie jedną, najbardziej pasującą kategorię lub podkategorię z poniższej listy:
+## Kategoria (pole "category")
+
+Wybierz dokładnie jedną, najbardziej pasującą kategorię z listy:
 - AI
 - Design
 - Electronics & DIY
@@ -35,10 +53,18 @@ Podaj dokładnie jedną, najbardziej pasującą kategorię lub podkategorię z p
 - Tech / Devops
 - Tech / Tools
 
-Jeśli materiał nie pasuje do żadnej kategorii w stu procentach, możesz zasugerować nową w polu "suggested_category".
+### Zasady
+- Jeśli wahasz się między dwiema kategoriami, wybierz bardziej OGÓLNĄ z listy.
+- Jeśli materiał nie pasuje wyraźnie do żadnej kategorii, możesz zasugerować nową w polu "suggested_category", ale i tak MUSISZ wybrać jedną z listy w polu "category".
+- "suggested_category" ustawiaj TYLKO gdy to naprawdę konieczne (materiał wyraźnie odstaje od listy).
 
 # Format odpowiedzi
-Zwróć TYLKO poprawny JSON (bez markdown, bez komentarzy) w formacie:
+
+Zwróć TYLKO:
+- null (gdy nie da się rzetelnie pobrać/przeczytać treści)
+  ALBO
+- poprawny JSON (bez markdown, bez komentarzy) w formacie:
+
 ```json
 {
   "title": "Tytuł wpisu",
@@ -50,6 +76,7 @@ Zwróć TYLKO poprawny JSON (bez markdown, bez komentarzy) w formacie:
 ```
 
 # Przykłady
+(Uwaga: przykłady pokazują styl, ale jeśli materiał źródłowy jest prosty/krótki, nie rozbudowuj opisu na siłę.)
 
 Dla URL: https://writethatblog.substack.com/p/technical-blogging-lessons-learned
 ```json
