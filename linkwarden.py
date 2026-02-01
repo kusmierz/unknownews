@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Linkwarden tools: sync newsletter descriptions and remove duplicate links.
+Linkwarden tools: sync newsletter descriptions, enrich links, and remove duplicates.
 
 Usage:
     # List all links grouped by collection
@@ -12,12 +12,16 @@ Usage:
     python linkwarden.py sync --collection 14    # sync specific collection
     python linkwarden.py sync --dry-run          # preview without updating
 
+    # Enrich links using LLM (generate titles, descriptions, tags)
+    python linkwarden.py enrich                    # enrich all links (empty fields only)
+    python linkwarden.py enrich --collection 14    # specific collection
+    python linkwarden.py enrich --force            # overwrite all fields
+    python linkwarden.py enrich --dry-run          # preview without updating
+    python linkwarden.py enrich --limit 5          # limit number of links
+
     # Remove duplicates across all collections (keeps oldest link in each group)
     python linkwarden.py remove-duplicates --dry-run  # preview deletions
     python linkwarden.py remove-duplicates            # actually delete duplicates
-
-    # Backward compatibility (defaults to sync)
-    python linkwarden.py --dry-run               # same as: sync --dry-run
 """
 
 import argparse
@@ -28,7 +32,7 @@ from dotenv import load_dotenv
 
 # Import from linkwarden modules
 from linkwarden.display import console
-from linkwarden.commands import list_links, remove_duplicates, sync_links
+from linkwarden.commands import enrich_links, list_links, remove_duplicates, sync_links
 
 
 def main():
@@ -85,37 +89,42 @@ def main():
         help="Preview deletions without actually deleting",
     )
 
-    # For backward compatibility, also add sync args to main parser
-    parser.add_argument(
+    # enrich command
+    enrich_parser = subparsers.add_parser("enrich", help="Enrich links using LLM (titles, descriptions, tags)")
+    enrich_parser.add_argument(
         "--collection",
         type=int,
         default=None,
-        help="Linkwarden collection ID (default: all collections)",
+        help="Filter to specific collection ID",
     )
-    parser.add_argument(
-        "--jsonl",
+    enrich_parser.add_argument(
+        "--prompt",
         type=str,
-        default="data/newsletters.jsonl",
-        help="Path to newsletters.jsonl (default: data/newsletters.jsonl)",
+        default="prompts/enrich-link.md",
+        help="Path to prompt template (default: prompts/enrich-link.md)",
     )
-    parser.add_argument(
+    enrich_parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Preview changes without updating Linkwarden",
     )
-    parser.add_argument(
+    enrich_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite all fields, not just empty ones",
+    )
+    enrich_parser.add_argument(
         "--limit",
         type=int,
         default=0,
-        help="Limit number of links to update (0 = no limit)",
-    )
-    parser.add_argument(
-        "--show-unmatched",
-        action="store_true",
-        help="Show all unmatched Linkwarden URLs",
+        help="Limit number of links to process (0 = no limit)",
     )
 
     args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
 
     # Load environment variables
     load_dotenv()
@@ -126,10 +135,9 @@ def main():
         console.print("[red]Error: LINKWARDEN_TOKEN not set in environment[/red]")
         sys.exit(1)
 
-    command = args.command or "sync"
-    console.print(f"[bold]linkwarden[/bold] {command}\n")
+    console.print(f"[bold]linkwarden[/bold] {args.command}\n")
 
-    if command == "sync":
+    if args.command == "sync":
         sync_links(
             base_url=base_url,
             jsonl_path=args.jsonl,
@@ -139,10 +147,20 @@ def main():
             limit=args.limit,
             show_unmatched=args.show_unmatched,
         )
-    elif command == "list":
+    elif args.command == "list":
         list_links(base_url, token, collection_id=args.collection)
-    elif command == "remove-duplicates":
+    elif args.command == "remove-duplicates":
         remove_duplicates(base_url, token, dry_run=args.dry_run)
+    elif args.command == "enrich":
+        enrich_links(
+            base_url=base_url,
+            token=token,
+            prompt_path=args.prompt,
+            collection_id=args.collection,
+            dry_run=args.dry_run,
+            force=args.force,
+            limit=args.limit,
+        )
 
 
 if __name__ == "__main__":

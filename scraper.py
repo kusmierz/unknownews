@@ -360,7 +360,7 @@ if __name__ == "__main__":
     console.print("[bold]unknow.news[/bold] scraper\n")
 
     # Check daily cache
-    cache_file = Path("data/cache_last-fetch.txt")
+    cache_file = Path("data/last-fetch_cache.txt")
     today = datetime.now().strftime("%Y-%m-%d")
     if cache_file.exists() and not args.force:
         last_fetch = cache_file.read_text().strip()

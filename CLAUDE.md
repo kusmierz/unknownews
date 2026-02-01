@@ -28,11 +28,17 @@ python linkwarden.py sync                    # sync all collections
 python linkwarden.py sync --collection 14    # specify collection
 python linkwarden.py sync --limit 5          # limit updates
 python linkwarden.py sync --show-unmatched   # show all unmatched URLs
-python linkwarden.py --dry-run               # backward compatible (no subcommand)
 
 # Remove duplicate links across all collections
 python linkwarden.py remove-duplicates --dry-run  # preview deletions
 python linkwarden.py remove-duplicates            # actually delete duplicates
+
+# Enrich links with LLM-generated titles, descriptions, and tags
+python linkwarden.py enrich --dry-run             # preview (caches LLM results)
+python linkwarden.py enrich                       # enrich empty fields only
+python linkwarden.py enrich --collection 14       # specific collection
+python linkwarden.py enrich --force               # regenerate all fields
+python linkwarden.py enrich --limit 5             # limit processed (including failures)
 ```
 
 ## Architecture
@@ -52,7 +58,7 @@ Helper functions:
 - `get_premium_url(url)` - converts to premium URL using password
 
 Caching:
-- Uses `data/cache_last-fetch.txt` to track last fetch date
+- Uses `data/last-fetch_cache.txt` to track last fetch date
 - Only fetches once per day (bypass with `--force`)
 
 ### linkwarden.py (main CLI)
@@ -79,11 +85,23 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
   - `get_tag_color(tag_name)` - consistent tag colors
 - `duplicates.py` - Duplicate detection
   - `find_duplicates(links)` -> `(exact_groups, fuzzy_groups)`
+- `llm.py` - LLM API client (OpenAI-compatible)
+  - `enrich_link(url, prompt_path)` - calls LLM to generate title, description, tags
+  - `call_responses_api(...)` - OpenAI Responses API with web search
+  - `call_chat_completions_api(...)` - standard Chat Completions API
+  - `parse_json_response(text)` - parses JSON from LLM response, decodes HTML entities
+- `llm_cache.py` - Cache for LLM results
+  - `get_cached(url)` / `set_cached(url, result)` / `remove_cached(url)`
+- `tag_utils.py` - Tag filtering utilities
+  - `is_system_tag(tag_name)` - checks for "unknow" or date tags (YYYY-MM-DD)
+  - `has_real_tags(tags)` - checks if link has non-system tags
+  - `filter_system_tags(tags)` / `get_system_tags(tags)`
 
 **Commands** (in `linkwarden/commands/`):
 - `list_links.py` - `list_links(base_url, token, collection_id)` - lists all links grouped by collection
 - `sync.py` - `sync_links(base_url, jsonl_path, token, collection_id, dry_run, limit, show_unmatched)` - syncs descriptions
 - `remove_duplicates.py` - `remove_duplicates(base_url, token, dry_run)` - finds and removes duplicates
+- `enrich.py` - `enrich_links(base_url, token, prompt_path, collection_id, dry_run, force, limit)` - LLM enrichment
 
 ## Output structure
 
@@ -91,7 +109,8 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
 data/
   newsletters.jsonl       # one JSON per line (scraped newsletters)
   scraped_urls.txt        # for deduplication across runs
-  cache_last-fetch.txt    # daily cache timestamp (YYYY-MM-DD)
+  last-fetch_cache.txt    # daily cache timestamp (YYYY-MM-DD)
+  llm_cache.json          # cached LLM enrichment results (cleared after successful update)
 ```
 
 ### Newsletter JSON schema
@@ -122,6 +141,10 @@ data/
 `.env` file (loaded by python-dotenv):
 - `LINKWARDEN_TOKEN` - API token for Linkwarden
 - `LINKWARDEN_URL` - Linkwarden instance URL (default: https://links.kusmierz.be)
+- `OPENAI_API_KEY` - API key for OpenAI (used by `enrich` command)
+- `OPENAI_BASE_URL` - Base URL (optional, for Groq/other OpenAI-compatible providers)
+- `OPENAI_MODEL` - Model name (default: `gpt-4o-mini`)
+- `OPENAI_USE_RESPONSE_API` - Set to `1` to use Responses API with web search (OpenAI only)
 
 ## Linkwarden API
 
