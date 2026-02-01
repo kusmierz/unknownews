@@ -29,7 +29,7 @@ def clean_text(text: str) -> str:
 
 
 def html_to_markdown(element) -> str:
-    """Convert HTML element to markdown text."""
+    """Convert HTML element to Markdown text."""
     if element is None:
         return ""
 
@@ -124,7 +124,7 @@ def scrape_newsletter(url: str) -> tuple[dict, list[dict]]:
                 sponsor_div = elem
                 break
 
-    # Extract sponsor content from div with markdown formatting
+    # Extract sponsor content from div with Markdown formatting
     if sponsor_div:
         sponsor = html_to_markdown(sponsor_div)
         # Normalize multiple newlines
@@ -151,7 +151,7 @@ def scrape_newsletter(url: str) -> tuple[dict, list[dict]]:
             in_description = True
             continue
 
-        # Skip and start collecting after passing marker paragraph (case insensitive)
+        # Skip and start collecting after passing marker paragraph (case-insensitive)
         text_lower = text.lower()
         if "pora na sponsora" in text_lower or "info o promocji" in text_lower:
             in_description = True
@@ -215,7 +215,7 @@ def scrape_newsletter(url: str) -> tuple[dict, list[dict]]:
                         "title": a.get_text(separator=" ", strip=True)
                     })
 
-    # Fallback: if no date found, add 7 days to newest previous newsletter date
+    # Fallback: if no date found, add 7 days to the newest previous newsletter date
     if not date and previous_newsletters:
         newest_prev_date = max(p["date"] for p in previous_newsletters)
         prev_dt = datetime.strptime(newest_prev_date, "%Y-%m-%d")
@@ -280,7 +280,7 @@ def get_premium_url(url: str) -> str:
 
 
 def crawl_newsletters(
-    start_url: str,
+    release_url: str,
     max_total: int = 50,
     output_dir: str = "data"
 ) -> int:
@@ -288,7 +288,7 @@ def crawl_newsletters(
     Crawl newsletters starting from URL, following 'previous' links.
 
     Args:
-        start_url: Starting newsletter URL
+        release_url: Starting newsletter URL
         max_total: Maximum newsletters to scrape
         output_dir: Directory for output files
 
@@ -300,14 +300,14 @@ def crawl_newsletters(
 
     # Load successfully scraped URLs from previous runs
     scraped_urls = load_scraped_urls(output_dir)
-    initial_count = len(scraped_urls)
+    # initial_count = len(scraped_urls)
 
     # seen = scraped + processed this run (prevents queue duplicates and re-fetching)
     seen = scraped_urls.copy()
-    queue = deque([start_url])
+    queue = deque([release_url])
     scraped_count = 0
 
-    with console.status("Fetching...", spinner="dots") as status:
+    with console.status("Fetching...", spinner="dots"):
         while queue and scraped_count < max_total:
             url = queue.popleft()
 
@@ -368,14 +368,16 @@ if __name__ == "__main__":
             console.print(f"[dim]Already fetched today. Use --force to re-fetch.[/dim]")
             raise SystemExit(0)
 
-    if args.url:
-        start_url = args.url
-    else:
+    start_url = args.url if args.url else None
+    if not start_url:
         with console.status("Finding latest...", spinner="dots"):
             start_url = get_latest_newsletter_url()
 
-    crawl_newsletters(start_url, max_total=args.limit)
+    if start_url:
+        crawl_newsletters(start_url, max_total=args.limit)
 
-    # Update cache
-    cache_file.parent.mkdir(exist_ok=True)
-    cache_file.write_text(today)
+        # Update cache
+        cache_file.parent.mkdir(exist_ok=True)
+        cache_file.write_text(today)
+    else:
+        console.print("[red]Could not determine newsletter URL[/red]")
