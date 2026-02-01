@@ -354,9 +354,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Crawl unknownews newsletters")
     parser.add_argument("url", nargs="?", help="Starting newsletter URL (default: latest from unknow.news)")
     parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum newsletters to fetch (default: 10)")
+    parser.add_argument("-f", "--force", action="store_true", help="Force fetch even if already fetched today")
     args = parser.parse_args()
 
     console.print("[bold]unknow.news[/bold] scraper\n")
+
+    # Check daily cache
+    cache_file = Path("data/cache_last-fetch.txt")
+    today = datetime.now().strftime("%Y-%m-%d")
+    if cache_file.exists() and not args.force:
+        last_fetch = cache_file.read_text().strip()
+        if last_fetch == today:
+            console.print(f"[dim]Already fetched today. Use --force to re-fetch.[/dim]")
+            raise SystemExit(0)
 
     if args.url:
         start_url = args.url
@@ -365,3 +375,7 @@ if __name__ == "__main__":
             start_url = get_latest_newsletter_url()
 
     crawl_newsletters(start_url, max_total=args.limit)
+
+    # Update cache
+    cache_file.parent.mkdir(exist_ok=True)
+    cache_file.write_text(today)
