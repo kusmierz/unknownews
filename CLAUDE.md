@@ -12,30 +12,33 @@ Python scraper and crawler for unknownews newsletter (mrugalski.pl). Extracts st
 source .venv/bin/activate        # activate virtualenv
 pip install -r requirements.txt  # install deps
 
-# Crawl newsletters
-python scraper.py <url> [-n LIMIT]
-python scraper.py https://mrugalski.pl/nl/wu/u8d1L2kQOHGVezsjqUWH0g -n 50
+# Crawl newsletters (with daily caching)
+python scraper.py [-n LIMIT] [-f]                 # fetch latest (default: max 10, cached daily)
+python scraper.py -n 50                           # fetch up to 50 newsletters
+python scraper.py --force                         # bypass daily cache
+python scraper.py <url> -n 20                     # start from specific URL
 
 # List links in Linkwarden
-python linkwarden_sync.py list                    # list all links grouped by collection
-python linkwarden_sync.py list --collection 14   # list links from specific collection
+python linkwarden.py list                    # list all links grouped by collection
+python linkwarden.py list --collection 14   # list links from specific collection
 
 # Sync to Linkwarden
-python linkwarden_sync.py sync --dry-run          # preview changes
-python linkwarden_sync.py sync                    # sync to collection 14
-python linkwarden_sync.py sync --collection 14    # specify collection
-python linkwarden_sync.py sync --limit 5          # limit updates
-python linkwarden_sync.py --dry-run               # backward compatible (no subcommand)
+python linkwarden.py sync --dry-run          # preview changes
+python linkwarden.py sync                    # sync all collections
+python linkwarden.py sync --collection 14    # specify collection
+python linkwarden.py sync --limit 5          # limit updates
+python linkwarden.py sync --show-unmatched   # show all unmatched URLs
+python linkwarden.py --dry-run               # backward compatible (no subcommand)
 
 # Remove duplicate links across all collections
-python linkwarden_sync.py remove-duplicates --dry-run  # preview deletions
-python linkwarden_sync.py remove-duplicates            # actually delete duplicates
+python linkwarden.py remove-duplicates --dry-run  # preview deletions
+python linkwarden.py remove-duplicates            # actually delete duplicates
 ```
 
 ## Architecture
 
 ### scraper.py
-Single-file scraper using BeautifulSoup. Main functions:
+Single-file scraper using BeautifulSoup with daily caching. Main functions:
 
 - `scrape_newsletter(url)` -> `(newsletter_dict, previous_newsletters_list)`
 - `crawl_newsletters(start_url, max_total=50, output_dir="data")` -> `int` (count)
@@ -45,33 +48,50 @@ Helper functions:
 - `html_to_markdown(element)` - converts HTML to markdown (bold, italic, links, lists)
 - `load_scraped_urls(output_dir)` / `save_scraped_urls(urls, output_dir)` - deduplication
 - `append_newsletter(newsletter, output_dir)` - append to JSONL
+- `get_latest_newsletter_url()` - fetches latest newsletter URL
+- `get_premium_url(url)` - converts to premium URL using password
 
-### linkwarden_sync.py
-Linkwarden tools: syncs newsletter descriptions and finds duplicate links. Uses `rich` for colored output.
+Caching:
+- Uses `data/cache_last-fetch.txt` to track last fetch date
+- Only fetches once per day (bypass with `--force`)
 
-Main functions:
-- `load_newsletter_index(jsonl_path)` -> `(exact_index, fuzzy_index)` - builds two indexes for matching
-- `fetch_collection_links(base_url, collection_id, token)` -> `list[dict]` - uses `/api/v1/search` with pagination
-- `fetch_all_collections(base_url, token)` -> `list[dict]` - fetches all collections from Linkwarden
-- `fetch_all_links(base_url, token)` -> `list[dict]` - fetches all links from all collections
-- `list_links(base_url, token, collection_id)` - lists all links grouped by collection with clickable names
-- `find_duplicates(links)` -> `(exact_groups, fuzzy_groups)` - finds duplicates using normalized URL and fuzzy matching
-- `remove_duplicates(base_url, token, dry_run)` - finds and removes duplicate links
-- `update_link(base_url, link, new_name, new_url, new_description, new_tags, token)` -> `bool` - PUT to update
-- `sync_links(base_url, collection_id, jsonl_path, dry_run, limit)` - main sync logic
+### linkwarden.py (main CLI)
+Entry point for Linkwarden tools. Parses command-line arguments and dispatches to command implementations.
 
-Helpers:
-- `normalize_url(url)` - removes fragments, tracking params (utm_*, fbclid, etc.), normalizes http->https
-- `get_url_path_key(url)` - extracts domain+path for fuzzy matching
-- `show_diff(old, new)` - displays inline diff with highlighted changes
-- `display_duplicates(exact_groups, fuzzy_groups, total_links)` - displays duplicate report
+### linkwarden/ (module)
+Modular Linkwarden tools for syncing newsletter descriptions and managing duplicates. Uses `rich` for colored output.
+
+**Core modules:**
+- `api.py` - Linkwarden API client
+  - `fetch_all_collections(base_url, token)` - get all collections
+  - `fetch_collection_links(base_url, collection_id, token)` - get links from collection (paginated)
+  - `fetch_all_links(base_url, token, silent)` - get all links from all collections
+  - `update_link(...)` - update link via PUT
+  - `delete_link(base_url, link_id, token)` - delete link
+- `url_utils.py` - URL normalization and matching
+  - `normalize_url(url)` - removes fragments, tracking params, normalizes http->https
+  - `get_url_path_key(url)` - extracts domain+path for fuzzy matching
+  - `filter_query_params(query, keep_only)` - filters query parameters
+- `newsletter.py` - Newsletter index management
+  - `load_newsletter_index(jsonl_path)` -> `(exact_index, fuzzy_index)`
+- `display.py` - Rich console formatting
+  - `show_diff(old, new, indent, muted)` - displays inline diff
+  - `get_tag_color(tag_name)` - consistent tag colors
+- `duplicates.py` - Duplicate detection
+  - `find_duplicates(links)` -> `(exact_groups, fuzzy_groups)`
+
+**Commands** (in `linkwarden/commands/`):
+- `list_links.py` - `list_links(base_url, token, collection_id)` - lists all links grouped by collection
+- `sync.py` - `sync_links(base_url, jsonl_path, token, collection_id, dry_run, limit, show_unmatched)` - syncs descriptions
+- `remove_duplicates.py` - `remove_duplicates(base_url, token, dry_run)` - finds and removes duplicates
 
 ## Output structure
 
 ```
 data/
-  newsletters.jsonl    # one JSON per line
-  scraped_urls.txt     # for deduplication across runs
+  newsletters.jsonl       # one JSON per line (scraped newsletters)
+  scraped_urls.txt        # for deduplication across runs
+  cache_last-fetch.txt    # daily cache timestamp (YYYY-MM-DD)
 ```
 
 ### Newsletter JSON schema
