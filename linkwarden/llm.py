@@ -14,6 +14,7 @@ from openai.types.shared_params import ResponseFormatJSONObject
 from .display import console
 
 DEFAULT_MODEL = "gpt-4o-mini"
+PROMPT_PATH = "prompts/enrich-link.md"
 
 
 def load_prompt(prompt_path: str) -> str:
@@ -100,7 +101,7 @@ def call_chat_completions_api(client: OpenAI, model: str, prompt: str, url: str)
     return response.choices[0].message.content
 
 
-def enrich_link(url: str, prompt_path: str, max_retries: int = 3) -> dict | None:
+def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3) -> dict | None:
     """Call LLM to enrich a link with title, description, and tags.
 
     Uses OpenAI-compatible API. Configure via environment variables:
@@ -118,6 +119,9 @@ def enrich_link(url: str, prompt_path: str, max_retries: int = 3) -> dict | None
         Dict with keys: title, description, tags (list), category, suggested_category
         Returns None on failure
     """
+    if not prompt_path:
+      prompt_path = PROMPT_PATH
+
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         console.print("[red]Error: OPENAI_API_KEY not set[/red]")

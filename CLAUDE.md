@@ -18,6 +18,13 @@ python scraper.py -n 50                           # fetch up to 50 newsletters
 python scraper.py --force                         # bypass daily cache
 python scraper.py <url> -n 20                     # start from specific URL
 
+# Add URL to Linkwarden (with newsletter or LLM enrichment)
+python linkwarden.py add <url>                    # add to Uncategorized (with warning)
+python linkwarden.py add <url> --dry-run          # preview without adding
+python linkwarden.py add <url> --collection 14    # specify target collection
+python linkwarden.py add <url> --unread           # add with "unread" tag
+python linkwarden.py add <url> --silent           # no output, just exit code
+
 # List links in Linkwarden
 python linkwarden.py list                    # list all links grouped by collection
 python linkwarden.py list --collection 14   # list links from specific collection
@@ -73,6 +80,7 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
   - `fetch_collection_links(base_url, collection_id, token)` - get links from collection (paginated)
   - `fetch_all_links(base_url, token, silent)` - get all links from all collections
   - `update_link(...)` - update link via PUT
+  - `create_link(...)` - create link via POST
   - `delete_link(base_url, link_id, token)` - delete link
 - `url_utils.py` - URL normalization and matching
   - `normalize_url(url)` - removes fragments, tracking params, normalizes http->https
@@ -93,11 +101,12 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
 - `llm_cache.py` - Cache for LLM results
   - `get_cached(url)` / `set_cached(url, result)` / `remove_cached(url)`
 - `tag_utils.py` - Tag filtering utilities
-  - `is_system_tag(tag_name)` - checks for "unknow" or date tags (YYYY-MM-DD)
+  - `is_system_tag(tag_name)` - checks for "unknow", "unread", or date tags (YYYY-MM-DD)
   - `has_real_tags(tags)` - checks if link has non-system tags
   - `filter_system_tags(tags)` / `get_system_tags(tags)`
 
 **Commands** (in `linkwarden/commands/`):
+- `add.py` - `add_link(base_url, token, url, collection_id, dry_run, unread, silent)` - adds URL with enrichment
 - `list_links.py` - `list_links(base_url, token, collection_id)` - lists all links grouped by collection
 - `sync.py` - `sync_links(base_url, jsonl_path, token, collection_id, dry_run, limit, show_unmatched)` - syncs descriptions
 - `remove_duplicates.py` - `remove_duplicates(base_url, token, dry_run)` - finds and removes duplicates
@@ -172,6 +181,18 @@ Get all collections:
 ```
 GET /api/v1/collections
 Response: [{ "id": 14, "name": "unknow", ... }, ...]
+```
+
+Create link:
+```
+POST /api/v1/links
+{
+  "name": "Link title",
+  "url": "https://example.com/article",
+  "description": "...",
+  "collectionId": 14,
+  "tags": [{"name": "tag1"}, {"name": "tag2"}]
+}
 ```
 
 Note: `/api/v1/links` GET is deprecated, use `/api/v1/search` instead.

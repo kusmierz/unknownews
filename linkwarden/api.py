@@ -115,3 +115,45 @@ def delete_link(base_url: str, link_id: int, token: str) -> bool:
     response = requests.delete(f"{base_url}/api/v1/links/{link_id}", headers=headers)
     response.raise_for_status()
     return True
+
+
+def create_link(
+    base_url: str,
+    name: str,
+    url: str,
+    description: str,
+    tags: list[str],
+    collection_id: int,
+    token: str,
+) -> dict:
+    """Create a new link in Linkwarden.
+
+    Args:
+        base_url: Linkwarden API base URL
+        name: Link title/name
+        url: The URL
+        description: Link description
+        tags: List of tag names
+        collection_id: Target collection ID
+        token: API token
+
+    Returns:
+        The created link data from the API
+    """
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "name": name,
+        "url": url,
+        "description": description,
+        "collectionId": collection_id,
+        "tags": [{"name": t} for t in tags],
+    }
+
+    response = requests.post(f"{base_url}/api/v1/links", headers=headers, json=payload)
+    if not response.ok:
+        raise Exception(f"API Error: {response.status_code} - {response.text}")
+    return response.json()

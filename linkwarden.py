@@ -3,6 +3,13 @@
 Linkwarden tools: sync newsletter descriptions, enrich links, and remove duplicates.
 
 Usage:
+    # Add a URL to Linkwarden with enrichment
+    python linkwarden.py add <url>                    # add to Uncategorized (with warning)
+    python linkwarden.py add <url> --dry-run          # preview without adding
+    python linkwarden.py add <url> --collection 14    # specify target collection
+    python linkwarden.py add <url> --unread           # add with "unread" tag
+    python linkwarden.py add <url> --silent           # no output, just exit code
+
     # List all links grouped by collection
     python linkwarden.py list                    # list all links
     python linkwarden.py list --collection 14   # list links from specific collection
@@ -32,7 +39,7 @@ from dotenv import load_dotenv
 
 # Import from linkwarden modules
 from linkwarden.display import console
-from linkwarden.commands import enrich_links, list_links, remove_duplicates, sync_links
+from linkwarden.commands import add_link, enrich_links, list_links, remove_duplicates, sync_links
 
 
 def main():
@@ -41,6 +48,35 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command")
 
+    # add command
+    add_parser = subparsers.add_parser("add", help="Add a URL to Linkwarden with enrichment")
+    add_parser.add_argument(
+        "url",
+        type=str,
+        help="URL to add",
+    )
+    add_parser.add_argument(
+        "--collection",
+        type=int,
+        default=1,
+        help="Target collection ID (default: 1 = Uncategorized)",
+    )
+    add_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview without adding to Linkwarden",
+    )
+    add_parser.add_argument(
+        "--unread",
+        action="store_true",
+        help='Add "unread" tag',
+    )
+    add_parser.add_argument(
+        "--silent",
+        action="store_true",
+        help="No output, just exit code (ignored with --dry-run)",
+    )
+
     # sync command (existing functionality)
     sync_parser = subparsers.add_parser("sync", help="Sync newsletter descriptions to Linkwarden")
     sync_parser.add_argument(
@@ -48,12 +84,6 @@ def main():
         type=int,
         default=None,
         help="Linkwarden collection ID (default: all collections)",
-    )
-    sync_parser.add_argument(
-        "--jsonl",
-        type=str,
-        default="data/newsletters.jsonl",
-        help="Path to newsletters.jsonl (default: data/newsletters.jsonl)",
     )
     sync_parser.add_argument(
         "--dry-run",
@@ -98,12 +128,6 @@ def main():
         help="Filter to specific collection ID",
     )
     enrich_parser.add_argument(
-        "--prompt",
-        type=str,
-        default="prompts/enrich-link.md",
-        help="Path to prompt template (default: prompts/enrich-link.md)",
-    )
-    enrich_parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Preview changes without updating Linkwarden",
@@ -135,12 +159,25 @@ def main():
         console.print("[red]Error: LINKWARDEN_TOKEN not set in environment[/red]")
         sys.exit(1)
 
-    console.print(f"[bold]linkwarden[/bold] {args.command}\n")
+    # add command handles its own header
+    if args.command != "add" or args.silent:
+        if args.command != "add":
+            console.print(f"[bold]linkwarden[/bold] {args.command}\n")
 
-    if args.command == "sync":
+    if args.command == "add":
+        exit_code = add_link(
+            base_url=base_url,
+            token=token,
+            url=args.url,
+            collection_id=args.collection,
+            dry_run=args.dry_run,
+            unread=args.unread,
+            silent=args.silent,
+        )
+        sys.exit(exit_code)
+    elif args.command == "sync":
         sync_links(
             base_url=base_url,
-            jsonl_path=args.jsonl,
             token=token,
             collection_id=args.collection,
             dry_run=args.dry_run,
@@ -155,7 +192,6 @@ def main():
         enrich_links(
             base_url=base_url,
             token=token,
-            prompt_path=args.prompt,
             collection_id=args.collection,
             dry_run=args.dry_run,
             force=args.force,

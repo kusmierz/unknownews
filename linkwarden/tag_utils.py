@@ -6,7 +6,7 @@ import re
 DATE_TAG_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # System tags that should be preserved and not counted as "real" tags
-SYSTEM_TAGS = {"unknow"}
+SYSTEM_TAGS = {"unknow", "unread"}
 
 
 def is_system_tag(tag_name: str) -> bool:

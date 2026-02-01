@@ -1,18 +1,29 @@
 """Newsletter index loading and management."""
 
 import json
+import os
+
 from .url_utils import normalize_url, get_url_path_key
 
+JSONL_PATH = "data/newsletters.jsonl"
 
-def load_newsletter_index(jsonl_path: str) -> tuple[dict[str, dict], dict[str, dict]]:
+def load_newsletter_index(jsonl_path: str | None = None) -> tuple[dict[str, dict], dict[str, dict]]:
     """Build indexes mapping URL -> {description, date, title}.
 
     Returns:
         - exact_index: normalized URL -> data
         - fuzzy_index: path key (no protocol/query) -> data
     """
+
+    if not jsonl_path:
+      jsonl_path = JSONL_PATH
+
+    if not os.path.exists(jsonl_path):
+      raise FileNotFoundError
+
     exact_index = {}
     fuzzy_index = {}
+
     with open(jsonl_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()

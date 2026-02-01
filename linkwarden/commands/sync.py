@@ -8,8 +8,8 @@ from ..display import console, show_diff
 
 def sync_links(
     base_url: str,
-    jsonl_path: str,
     token: str,
+    jsonl_path: str | None = None,
     collection_id: int | None = None,
     dry_run: bool = False,
     limit: int = 0,

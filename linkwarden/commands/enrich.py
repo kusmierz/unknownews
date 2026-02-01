@@ -62,7 +62,7 @@ def needs_enrichment(link: dict, force: bool = False) -> dict:
 def enrich_links(
     base_url: str,
     token: str,
-    prompt_path: str,
+    prompt_path: str | None = None,
     collection_id: int | None = None,
     dry_run: bool = False,
     force: bool = False,
