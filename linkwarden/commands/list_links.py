@@ -6,18 +6,29 @@ import shutil
 from rich.markup import escape
 from rich.text import Text
 
-from ..api import fetch_all_collections, fetch_collection_links, fetch_all_links
+from ..api import fetch_collection_links, fetch_all_links
+from ..collections_cache import get_collections
+from ..config import get_api_config
 from ..display import console, get_tag_color
 from ..duplicates import find_duplicates
 
 
-def list_links(base_url: str, token: str, collection_id: int | None = None) -> None:
-    """List all links grouped by collection."""
+def list_links(collection_id: int | None = None) -> None:
+    """List all links grouped by collection.
+
+    Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
+
+    Args:
+        collection_id: If provided, only list links from this collection
+    """
+    base_url, _ = get_api_config()
+
     # Fetch links
     with console.status("Fetching...", spinner="dots"):
         if collection_id is not None:
-            links = fetch_collection_links(base_url, collection_id, token)
-            collections = fetch_all_collections(base_url, token)
+            links = fetch_collection_links(collection_id)
+
+            collections = get_collections()
             collection_name = next(
                 (c.get("name", f"Collection {collection_id}") for c in collections if c["id"] == collection_id),
                 f"Collection {collection_id}"
@@ -25,7 +36,7 @@ def list_links(base_url: str, token: str, collection_id: int | None = None) -> N
             for link in links:
                 link["_collection_name"] = collection_name
         else:
-            links = fetch_all_links(base_url, token, silent=True)
+            links = fetch_all_links(silent=True)
 
     if not links:
         console.print("[dim]No links found.[/dim]")

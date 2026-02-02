@@ -1,14 +1,13 @@
 """Add link command - adds a URL to Linkwarden with newsletter or LLM enrichment."""
 
-from ..api import create_link, fetch_all_collections
+from ..api import create_link
+from ..collections_cache import get_collections
 from ..display import console, get_tag_color
 from ..llm import enrich_link
 from ..newsletter import load_newsletter_index
 from ..url_utils import normalize_url, get_url_path_key
 
 def add_link(
-    base_url: str,
-    token: str,
     url: str,
     collection_id: int,
     dry_run: bool = False,
@@ -18,8 +17,6 @@ def add_link(
     """Add a URL to Linkwarden with enrichment from newsletter or LLM.
 
     Args:
-        base_url: Linkwarden API base URL
-        token: API token
         url: URL to add
         collection_id: Target collection ID
         dry_run: If True, preview without adding
@@ -110,6 +107,23 @@ def add_link(
     if unread and "unread" not in tags:
         tags.append("unread")
 
+    # Match category to collection (if we have a category from LLM)
+    original_collection_id = collection_id
+    if category:
+        try:
+            collections = get_collections()
+
+            # Try exact match first
+            for coll in collections:
+                coll_name = coll.get("name", "").strip()
+                if coll_name.lower() == category.lower():
+                    collection_id = coll["id"]
+                    break
+        except Exception as e:
+            collection_id = original_collection_id
+            if show_output:
+                console.print(f"[yellow]Warning: Could not fetch collections: {e}[/yellow]")
+
     # Display results
     if show_output:
         console.print(f"[bold]linkwarden add[/bold]\n")
@@ -147,7 +161,7 @@ def add_link(
 
     if show_output:
         try:
-            collections = fetch_all_collections(base_url, token)
+            collections = get_collections()
             for coll in collections:
                 if coll["id"] == collection_id:
                     collection_name = f"{coll.get('name', '')} (#{collection_id})"
@@ -171,13 +185,11 @@ def add_link(
     # Create link in Linkwarden
     try:
         create_link(
-            base_url=base_url,
-            name=title,
-            url=normalized_url,
-            description=description,
-            tags=tags,
-            collection_id=collection_id,
-            token=token,
+          url=normalized_url,
+          name=title,
+          description=description,
+          tags=tags,
+          collection_id=collection_id,
         )
         if show_output:
             console.print("[green]Added![/green]")

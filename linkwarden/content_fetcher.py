@@ -5,14 +5,13 @@ Fetches actual page content (articles and videos) locally before passing to LLM.
 Uses trafilatura for articles and yt-dlp for videos.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from urllib.parse import urlparse
 
 import trafilatura
 import yt_dlp
-from rich import Console
 
-console = Console(highlight=False)
+from .display import console
 
 def is_video_url(url: str) -> bool:
     """
@@ -78,7 +77,7 @@ def format_duration(seconds: int) -> str:
     return " ".join(parts)
 
 
-def truncate_content(text: str, max_chars: int) -> str:
+def truncate_content(text: str, max_chars: int) -> Tuple[str, bool]:
     """
     Intelligently truncate text at sentence boundaries.
 
@@ -87,10 +86,10 @@ def truncate_content(text: str, max_chars: int) -> str:
         max_chars: Maximum characters (approximate)
 
     Returns:
-        Truncated text with " ..." suffix if truncated
+        Tuple of (truncated text with " ..." suffix if truncated, was_truncated boolean)
     """
     if len(text) <= max_chars:
-      console.print("[yellow]Empty response from API[/yellow]")
+        return text, False
 
     # Find last sentence boundary before max_chars
     truncated = text[:max_chars]
@@ -105,14 +104,14 @@ def truncate_content(text: str, max_chars: int) -> str:
             last_boundary = pos + len(ending) - 1  # Keep the punctuation
 
     if last_boundary > max_chars * 0.5:  # Only use boundary if it's not too early
-        return truncated[:last_boundary + 1] + " ..."
+        return truncated[:last_boundary + 1] + " ...", True
 
     # Fallback: truncate at last space
     last_space = truncated.rfind(' ')
     if last_space > 0:
-        return truncated[:last_space] + " ..."
+        return truncated[:last_space] + " ...", True
 
-    return truncated + " ..."
+    return truncated + " ...", True
 
 
 def fetch_article_content(url: str) -> Optional[Dict[str, Any]]:
@@ -148,10 +147,11 @@ def fetch_article_content(url: str) -> Optional[Dict[str, Any]]:
             return None
 
         # Truncate to 8,000 chars
-        text_len = len(text)
-        text = truncate_content(text, 8000)
-        if text_len != len(text):
-          console.print("[yellow]Truncated text[/yellow]")
+        original_length = len(text)
+        text, was_truncated = truncate_content(text, 8000)
+
+        if was_truncated:
+            console.print(f"[dim]  ℹ Content truncated: {original_length} → {len(text)} chars[/dim]")
 
         result = {
             "title": metadata.title if metadata else None,

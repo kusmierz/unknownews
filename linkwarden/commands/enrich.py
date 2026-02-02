@@ -3,7 +3,9 @@
 import html
 from urllib.parse import urlparse
 
-from ..api import fetch_all_collections, fetch_collection_links, fetch_all_links, update_link
+from ..api import fetch_collection_links, fetch_all_links, update_link
+from ..collections_cache import get_collections
+from ..config import get_api_config
 from ..display import console, get_tag_color
 from ..llm import enrich_link
 from ..llm_cache import get_cached, set_cached, remove_cached
@@ -60,8 +62,6 @@ def needs_enrichment(link: dict, force: bool = False) -> dict:
 
 
 def enrich_links(
-    base_url: str,
-    token: str,
     prompt_path: str | None = None,
     collection_id: int | None = None,
     dry_run: bool = False,
@@ -70,18 +70,20 @@ def enrich_links(
 ) -> None:
     """Enrich links using LLM to generate titles, descriptions, and tags.
 
+    Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
+
     Args:
-        base_url: Linkwarden API base URL
-        token: API token
         prompt_path: Path to the prompt template file
         collection_id: Optional collection ID to filter to
         dry_run: If True, preview changes without updating
         force: If True, regenerate all fields even if not empty
         limit: Maximum number of links to process (0 = no limit)
     """
+    base_url, _ = get_api_config()
+
     # Show scope
     if collection_id is not None:
-        collections = fetch_all_collections(base_url, token)
+        collections = get_collections()
         coll_name = next(
             (c.get("name") for c in collections if c["id"] == collection_id),
             f"#{collection_id}",
@@ -94,9 +96,9 @@ def enrich_links(
     # Fetch links
     with console.status("Fetching links...", spinner="dots"):
         if collection_id is not None:
-            links = fetch_collection_links(base_url, collection_id, token)
+            links = fetch_collection_links(collection_id)
         else:
-            links = fetch_all_links(base_url, token, silent=True)
+            links = fetch_all_links(silent=not dry_run)
 
     console.print(f"[bold]{len(links)}[/bold] links total\n")
 
@@ -200,13 +202,11 @@ def enrich_links(
         if not dry_run:
             try:
                 update_link(
-                    base_url,
                     link,
                     new_name,
                     link_url,
                     new_description,
                     new_tags,
-                    token,
                     dry_run=False,
                 )
                 enriched += 1

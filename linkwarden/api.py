@@ -1,11 +1,15 @@
 """Linkwarden API client."""
-
 import requests
+from .config import get_api_config
 from .display import console
 
 
-def fetch_all_collections(base_url: str, token: str) -> list[dict]:
-    """Fetch all collections from Linkwarden."""
+def fetch_all_collections() -> list[dict]:
+    """Fetch all collections from Linkwarden.
+
+    Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
+    """
+    base_url, token = get_api_config()
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.get(f"{base_url}/api/v1/collections", headers=headers)
     response.raise_for_status()
@@ -14,8 +18,15 @@ def fetch_all_collections(base_url: str, token: str) -> list[dict]:
     return data.get("response", [])
 
 
-def fetch_collection_links(base_url: str, collection_id: int, token: str) -> list[dict]:
-    """Fetch all links from a Linkwarden collection using search API with pagination."""
+def fetch_collection_links(collection_id: int) -> list[dict]:
+    """Fetch all links from a Linkwarden collection using search API with pagination.
+
+    Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
+
+    Args:
+        collection_id: Collection ID to fetch links from
+    """
+    base_url, token = get_api_config()
     headers = {"Authorization": f"Bearer {token}"}
     all_links = []
     cursor = None
@@ -44,39 +55,58 @@ def fetch_collection_links(base_url: str, collection_id: int, token: str) -> lis
     return all_links
 
 
-def fetch_all_links(base_url: str, token: str, silent: bool = False) -> list[dict]:
-    """Fetch all links from all collections."""
-    collections = fetch_all_collections(base_url, token)
+def fetch_all_links(silent: bool = False) -> list[dict]:
+    """Fetch all links from all collections.
+
+    Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
+
+    Args:
+        silent: If True, don't print progress messages
+    """
+    base_url, _ = get_api_config()
+    collections = fetch_all_collections()
     all_links = []
 
     for collection in collections:
         collection_id = collection["id"]
         collection_name = collection.get("name", f"Collection {collection_id}")
         collection_url = f"{base_url}/collections/{collection_id}"
-        links = fetch_collection_links(base_url, collection_id, token)
+        links = fetch_collection_links(collection_id)
         for link in links:
             link["_collection_name"] = collection_name
         all_links.extend(links)
         if not silent:
             console.print(f"  [dim][link={collection_url}]{collection_name}[/link][/dim] [green]{len(links)}[/green]")
 
+    console.print("")
+
     return all_links
 
 
 def update_link(
-    base_url: str,
     link: dict,
     new_name: str,
     new_url: str,
     new_description: str,
     new_tags: list[str],
-    token: str,
     dry_run: bool = False,
 ) -> bool:
-    """Update a Linkwarden link with name, url, description and tags."""
+    """Update a Linkwarden link with name, url, description and tags.
+
+    Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
+
+    Args:
+        link: Existing link dict with id
+        new_name: New link title
+        new_url: New URL
+        new_description: New description
+        new_tags: List of tag names to add
+        dry_run: If True, don't actually update
+    """
     if dry_run:
         return True
 
+    base_url, token = get_api_config()
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -109,8 +139,15 @@ def update_link(
     return True
 
 
-def delete_link(base_url: str, link_id: int, token: str) -> bool:
-    """Delete a link from Linkwarden."""
+def delete_link(link_id: int) -> bool:
+    """Delete a link from Linkwarden.
+
+    Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
+
+    Args:
+        link_id: ID of link to delete
+    """
+    base_url, token = get_api_config()
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.delete(f"{base_url}/api/v1/links/{link_id}", headers=headers)
     response.raise_for_status()
@@ -118,28 +155,28 @@ def delete_link(base_url: str, link_id: int, token: str) -> bool:
 
 
 def create_link(
-    base_url: str,
-    name: str,
     url: str,
+    name: str,
     description: str,
-    tags: list[str],
-    collection_id: int,
-    token: str,
+    tags: list[str] | None = None,
+    collection_id: int = 1,
 ) -> dict:
     """Create a new link in Linkwarden.
 
+    Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
+
     Args:
-        base_url: Linkwarden API base URL
-        name: Link title/name
         url: The URL
+        name: Link title/name
         description: Link description
         tags: List of tag names
         collection_id: Target collection ID
-        token: API token
 
     Returns:
         The created link data from the API
     """
+    base_url, token = get_api_config()
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",

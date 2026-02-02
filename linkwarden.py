@@ -32,7 +32,6 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 
 from dotenv import load_dotenv
@@ -150,14 +149,8 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    # Load environment variables
+    # Load environment variables (commands will read LINKWARDEN_URL and LINKWARDEN_TOKEN)
     load_dotenv()
-
-    base_url = os.environ.get("LINKWARDEN_URL", "https://links.kusmierz.be")
-    token = os.environ.get("LINKWARDEN_TOKEN")
-    if not token:
-        console.print("[red]Error: LINKWARDEN_TOKEN not set in environment[/red]")
-        sys.exit(1)
 
     # add command handles its own header
     if args.command != "add" or args.silent:
@@ -166,8 +159,6 @@ def main():
 
     if args.command == "add":
         exit_code = add_link(
-            base_url=base_url,
-            token=token,
             url=args.url,
             collection_id=args.collection,
             dry_run=args.dry_run,
@@ -177,21 +168,17 @@ def main():
         sys.exit(exit_code)
     elif args.command == "sync":
         sync_links(
-            base_url=base_url,
-            token=token,
             collection_id=args.collection,
             dry_run=args.dry_run,
             limit=args.limit,
             show_unmatched=args.show_unmatched,
         )
     elif args.command == "list":
-        list_links(base_url, token, collection_id=args.collection)
+        list_links(collection_id=args.collection)
     elif args.command == "remove-duplicates":
-        remove_duplicates(base_url, token, dry_run=args.dry_run)
+        remove_duplicates(dry_run=args.dry_run)
     elif args.command == "enrich":
         enrich_links(
-            base_url=base_url,
-            token=token,
             collection_id=args.collection,
             dry_run=args.dry_run,
             force=args.force,

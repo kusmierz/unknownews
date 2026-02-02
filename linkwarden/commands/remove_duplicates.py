@@ -1,16 +1,24 @@
 """Remove duplicates command."""
 
 from ..api import fetch_all_links, delete_link
+from ..config import get_api_config
 from ..display import console, show_diff
 from ..duplicates import find_duplicates
 
 
-def remove_duplicates(base_url: str, token: str, dry_run: bool = False) -> None:
-    """Fetch all links across all collections, find duplicates, and remove them."""
+def remove_duplicates(dry_run: bool = False) -> None:
+    """Fetch all links across all collections, find duplicates, and remove them.
+
+    Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
+
+    Args:
+        dry_run: If True, preview duplicates without deleting
+    """
+    base_url, _ = get_api_config()
     dry_label = "[dim](dry-run)[/dim] " if dry_run else ""
 
     with console.status("Fetching...", spinner="dots"):
-        all_links = fetch_all_links(base_url, token, silent=True)
+        all_links = fetch_all_links(silent=not dry_run)
 
     exact_groups, fuzzy_groups = find_duplicates(all_links)
     total_to_delete = sum(len(g["links"]) - 1 for g in exact_groups + fuzzy_groups)
@@ -59,7 +67,7 @@ def remove_duplicates(base_url: str, token: str, dry_run: bool = False) -> None:
         with console.status("Deleting...", spinner="dots"):
             for link in links_to_delete:
                 try:
-                    delete_link(base_url, link.get("id"), token)
+                    delete_link(link.get("id"))
                     deleted += 1
                 except Exception:
                     errors += 1
