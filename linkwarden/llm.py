@@ -124,9 +124,9 @@ def parse_json_response(response_text: str) -> dict | None:
 
 def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: int = 1) -> str | None:
   api_key = os.environ.get("OPENAI_API_KEY")
-  base_url = os.environ.get("OPENAI_BASE_URL")
   model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
-
+  base_url = os.environ.get("OPENAI_BASE_URL")
+  service_tier = os.environ.get("OPENAI_MODEL_TIER")
 
   if not api_key:
     console.print("[red]Error: OPENAI_API_KEY not set[/red]")
@@ -140,14 +140,13 @@ def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: in
 
   use_responses_api = os.environ.get("OPENAI_USE_RESPONSE_API", "").lower() in ("1", "true", "yes")
 
-
   # Call API with retry logic
   for attempt in range(max_retries):
     try:
       if use_responses_api:
-        response_text = call_responses_api(client, model, user_prompt, system_prompt)
+        response_text = call_responses_api(client, model, user_prompt, system_prompt, service_tier = service_tier)
       else:
-        response_text = call_chat_completions_api(client, model, user_prompt, system_prompt)
+        response_text = call_chat_completions_api(client, model, user_prompt, system_prompt, service_tier = service_tier)
       return response_text
 
     except Exception as e:
@@ -160,7 +159,7 @@ def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: in
         return None
 
 
-def call_responses_api(client: OpenAI, model: str, user_prompt: str, system_prompt: str | None = None) -> str | None:
+def call_responses_api(client: OpenAI, model: str, user_prompt: str, system_prompt: str | None = None, service_tier: str | None = None) -> str | None:
     """Call OpenAI Responses API.
 
     Args:
@@ -180,6 +179,7 @@ def call_responses_api(client: OpenAI, model: str, user_prompt: str, system_prom
     response = client.responses.create(
         model=model,
         input=input_content,
+        service_tier=service_tier,
     )
     # Extract text from response output
     response_text = getattr(response, "output_text", None)
@@ -195,7 +195,7 @@ def call_responses_api(client: OpenAI, model: str, user_prompt: str, system_prom
     return response_text
 
 
-def call_chat_completions_api(client: OpenAI, model: str, user_prompt: str, system_prompt: str | None = None) -> str | None:
+def call_chat_completions_api(client: OpenAI, model: str, user_prompt: str, system_prompt: str | None = None, service_tier: str | None = None) -> str | None:
     """Call OpenAI Chat Completions API.
 
     Args:
@@ -220,6 +220,7 @@ def call_chat_completions_api(client: OpenAI, model: str, user_prompt: str, syst
         model=model,
         messages=messages,
         response_format=response_format,
+        service_tier=service_tier,
     )
     return response.choices[0].message.content
 
