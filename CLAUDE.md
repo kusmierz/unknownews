@@ -75,13 +75,20 @@ Entry point for Linkwarden tools. Parses command-line arguments and dispatches t
 Modular Linkwarden tools for syncing newsletter descriptions and managing duplicates. Uses `rich` for colored output.
 
 **Core modules:**
-- `api.py` - Linkwarden API client
-  - `fetch_all_collections(base_url, token)` - get all collections
-  - `fetch_collection_links(base_url, collection_id, token)` - get links from collection (paginated)
-  - `fetch_all_links(base_url, token, silent)` - get all links from all collections
-  - `update_link(...)` - update link via PUT
-  - `create_link(...)` - create link via POST
-  - `delete_link(base_url, link_id, token)` - delete link
+- `config.py` - Configuration utility
+  - `get_api_config()` - reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment
+- `cache.py` - Unified cache service for all cache types
+  - `get_cache(key, cache_type, max_age_days)` - get cached value with optional expiration
+  - `set_cache(key, value, cache_type, ttl_days)` - set cache with optional TTL
+  - `remove_cache(key, cache_type)` - remove specific cache entry
+  - `clear_cache_type(cache_type)` - clear all cache for a type
+- `api.py` - Linkwarden API client (self-sustainable, reads credentials from environment)
+  - `fetch_all_collections()` - get all collections
+  - `fetch_collection_links(collection_id)` - get links from collection (paginated)
+  - `fetch_all_links(silent)` - get all links from all collections
+  - `update_link(link, new_name, new_url, new_description, new_tags, dry_run)` - update link via PUT
+  - `create_link(url, name, description, tags, collection_id)` - create link via POST
+  - `delete_link(link_id)` - delete link
 - `url_utils.py` - URL normalization and matching
   - `normalize_url(url)` - removes fragments, tracking params, normalizes http->https
   - `get_url_path_key(url)` - extracts domain+path for fuzzy matching
@@ -98,18 +105,22 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
   - `call_responses_api(...)` - OpenAI Responses API with web search
   - `call_chat_completions_api(...)` - standard Chat Completions API
   - `parse_json_response(text)` - parses JSON from LLM response, decodes HTML entities
-- `llm_cache.py` - Cache for LLM results
+- `llm_cache.py` - Thin wrapper around unified cache for LLM results
   - `get_cached(url)` / `set_cached(url, result)` / `remove_cached(url)`
+- `collections_cache.py` - Thin wrapper around unified cache for collections (1-day TTL)
+  - `get_collections()` - fetch collections from cache or API
+  - `clear_collections_cache()` - clear collections cache
 - `tag_utils.py` - Tag filtering utilities
   - `is_system_tag(tag_name)` - checks for "unknow", "unread", or date tags (YYYY-MM-DD)
   - `has_real_tags(tags)` - checks if link has non-system tags
   - `filter_system_tags(tags)` / `get_system_tags(tags)`
 
-**Commands** (in `linkwarden/commands/`):
-- `add.py` - `add_link(base_url, token, url, collection_id, dry_run, unread, silent)` - adds URL with enrichment
-- `list_links.py` - `list_links(base_url, token, collection_id)` - lists all links grouped by collection
-- `sync.py` - `sync_links(base_url, jsonl_path, token, collection_id, dry_run, limit, show_unmatched)` - syncs descriptions
-- `remove_duplicates.py` - `remove_duplicates(base_url, token, dry_run)` - finds and removes duplicates
+**Commands** (in `linkwarden/commands/`) - all self-sustainable, read credentials from environment:
+- `add.py` - `add_link(url, collection_id, dry_run, unread, silent)` - adds URL with enrichment
+- `list_links.py` - `list_links(collection_id)` - lists all links grouped by collection
+- `sync.py` - `sync_links(jsonl_path, collection_id, dry_run, limit, show_unmatched)` - syncs descriptions
+- `remove_duplicates.py` - `remove_duplicates(dry_run)` - finds and removes duplicates
+- `enrich.py` - `enrich_links(prompt_path, collection_id, dry_run, force, limit)` - LLM enrichment
 - `enrich.py` - `enrich_links(base_url, token, prompt_path, collection_id, dry_run, force, limit)` - LLM enrichment
 
 ## Output structure
@@ -119,7 +130,10 @@ data/
   newsletters.jsonl       # one JSON per line (scraped newsletters)
   scraped_urls.txt        # for deduplication across runs
   last-fetch_cache.txt    # daily cache timestamp (YYYY-MM-DD)
-  llm_cache.json          # cached LLM enrichment results (cleared after successful update)
+
+cache/                    # unified cache directory (managed by cache.py)
+  llm.json                # cached LLM enrichment results (per URL)
+  collections.json        # cached collections list (1-day TTL)
 ```
 
 ### Newsletter JSON schema

@@ -1,45 +1,40 @@
-"""Cache for LLM enrichment results."""
+"""Cache for LLM enrichment results.
 
-import json
-from pathlib import Path
+This is a thin wrapper around the unified cache service.
+"""
 
-DEFAULT_CACHE_PATH = "data/llm_cache.json"
+from typing import Optional
+from .cache import get_cache, set_cache, remove_cache
 
-
-def load_cache(cache_path: str = DEFAULT_CACHE_PATH) -> dict:
-    """Load cache from file."""
-    path = Path(cache_path)
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
+CACHE_TYPE = "llm"
 
 
-def save_cache(cache: dict, cache_path: str = DEFAULT_CACHE_PATH) -> None:
-    """Save cache to file."""
-    path = Path(cache_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+def get_cached(url: str) -> Optional[dict]:
+    """Get cached LLM result for a URL.
+
+    Args:
+        url: URL to look up
+
+    Returns:
+        Cached enrichment result dict or None
+    """
+    return get_cache(url, CACHE_TYPE)
 
 
-def get_cached(url: str, cache_path: str = DEFAULT_CACHE_PATH) -> dict | None:
-    """Get cached result for a URL."""
-    cache = load_cache(cache_path)
-    return cache.get(url)
+def set_cached(url: str, result: dict) -> None:
+    """Cache LLM result for a URL.
+
+    Args:
+        url: URL key
+        result: Enrichment result to cache
+    """
+    set_cache(url, result, CACHE_TYPE)
 
 
-def set_cached(url: str, result: dict, cache_path: str = DEFAULT_CACHE_PATH) -> None:
-    """Cache result for a URL."""
-    cache = load_cache(cache_path)
-    cache[url] = result
-    save_cache(cache, cache_path)
+def remove_cached(url: str) -> None:
+    """Remove cached LLM result for a URL after successful update.
 
-
-def remove_cached(url: str, cache_path: str = DEFAULT_CACHE_PATH) -> None:
-    """Remove cached result for a URL after successful update."""
-    cache = load_cache(cache_path)
-    if url in cache:
-        del cache[url]
-        save_cache(cache, cache_path)
+    Args:
+        url: URL to remove from cache
+    """
+    remove_cache(url, CACHE_TYPE)
