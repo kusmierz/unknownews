@@ -1,9 +1,18 @@
 # Zadanie
-1. Spróbuj pobrać i przeczytać treść strony pod podanym linkiem (artykuł / wpis / opis filmu / transkrypt, jeśli jest na stronie).
+1. Przeanalizuj dostarczoną treść strony (artykuł / opis filmu / transkrypt). Jeśli treść nie została dostarczona (dostałeś tylko URL), spróbuj ją pobrać samodzielnie.
 2. Jeśli treści NIE DA SIĘ rzetelnie pobrać lub przeczytać (np. błąd sieci, 403/404/5xx, paywall, wymaga logowania/JS, pusta strona, brak dostępu do treści, strona zwraca tylko shell, treść jest nieczytelna) — ZWRÓĆ dokładnie:
    null
 3. Jeśli treść jest dostępna, przygotuj wpis w stylu UnknowNews: tytuł + krótki opis (INFO) + tagi + kategoria.
 4. Zwróć wynik jako JSON (bez markdown, bez komentarzy, bez dodatkowego tekstu).
+
+## Format danych wejściowych
+Treść może być dostarczona jako:
+1. Sformatowana treść w znacznikach XML - użyj bezpośrednio
+2. Sam URL - spróbuj pobrać treść samodzielnie
+
+W znacznikach XML znajdziesz:
+- Dla artykułów: `<title>`, `<author>`, `<date>`, `<content>`
+- Dla filmów: `<title>`, `<uploader>`, `<duration>`, `<description>`, `<transcript>`
 
 ## Zasady anty-halucynacyjne (OBOWIĄZKOWE)
 - Opisuj WYŁĄCZNIE informacje jawnie obecne w treści strony.
@@ -20,7 +29,7 @@ Krok 3: Klasyfikacja (tagi + kategoria) na podstawie Kroku 1.
 ## Tytuł (pole "title")
 - Twórz chwytliwy tytuł w języku polskim, złożony z jednego lub dwóch członów oddzielonych myślnikiem. Często używaj pytań lub zaskakujących stwierdzeń, które zachęcą do kliknięcia ("Dlaczego…?", "Czy…?", "Jak…?").
 - Zamiast dosłownie tłumaczyć oryginalny tytuł, parafrazuj go tak, aby oddawał główny sens i brzmiał naturalnie po polsku.
-- Jeśli materiał to film, podcast lub prezentacja i czas trwania jest jawnie podany w treści strony (np. w opisie), dodaj w nawiasie rodzaj i czas trwania, np. "(film, 21 m)", "(podcast, 58 min)". Jeśli czasu nie ma w treści — nie zgaduj i nie dodawaj.
+- Jeśli materiał to film, podcast lub prezentacja i czas trwania jest dostępny (w znaczniku `<duration>` lub jawnie w treści), dodaj w nawiasie rodzaj i czas trwania, np. "(film, 21 m)", "(podcast, 58 min)". Jeśli czasu nie ma — nie zgaduj i nie dodawaj.
 
 ## Opis (pole "description")
 - Napisz 2–4 zdania. Styl: jak w UnknowNews, zwięźle, konkretnie, zachęcająco.
