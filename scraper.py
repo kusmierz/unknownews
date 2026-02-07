@@ -354,18 +354,27 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Crawl unknownews newsletters")
     parser.add_argument("url", nargs="?", help="Starting newsletter URL (default: latest from unknow.news)")
     parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum newsletters to fetch (default: 10)")
-    parser.add_argument("-f", "--force", action="store_true", help="Force fetch even if already fetched today")
+    parser.add_argument("-f", "--force", action="store_true", help="Force fetch even if fetched in the last 3 hours")
     args = parser.parse_args()
 
     console.print("[bold]unknow.news[/bold] scraper\n")
 
-    # Check daily cache
-    cache_file = Path("data/last-fetch_cache.txt")
-    today = datetime.now().strftime("%Y-%m-%d")
+    # Check fetch cache (3-hour expiry)
+    cache_file = Path("cache/last-fetch.txt")
+    now = datetime.now()
     if cache_file.exists() and not args.force:
-        last_fetch = cache_file.read_text().strip()
-        if last_fetch == today:
-            console.print(f"[dim]Already fetched today. Use --force to re-fetch.[/dim]")
+        last_fetch_text = cache_file.read_text().strip()
+        last_fetch = None
+        try:
+            last_fetch = datetime.fromisoformat(last_fetch_text)
+        except ValueError:
+            try:
+                last_fetch = datetime.strptime(last_fetch_text, "%Y-%m-%d")
+            except ValueError:
+                last_fetch = None
+
+        if last_fetch and (now - last_fetch) < timedelta(hours=3):
+            console.print("[dim]Already fetched within the last 3 hours. Use --force to re-fetch.[/dim]")
             raise SystemExit(0)
 
     start_url = args.url if args.url else None
@@ -378,6 +387,6 @@ if __name__ == "__main__":
 
         # Update cache
         cache_file.parent.mkdir(exist_ok=True)
-        cache_file.write_text(today)
+        cache_file.write_text(now.isoformat(timespec="seconds"))
     else:
         console.print("[red]Could not determine newsletter URL[/red]")
