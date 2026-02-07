@@ -2,12 +2,23 @@
 
 import json
 import os
+from typing import Any, TypedDict
 
 from .url_utils import normalize_url, get_url_path_key
 
 JSONL_PATH = "data/newsletters.jsonl"
 
-def load_newsletter_index(jsonl_path: str | None = None) -> tuple[dict[str, dict], dict[str, dict]]:
+
+class LinkIndexEntry(TypedDict):
+    description: str
+    title: str
+    date: str
+    original_url: str
+
+
+def load_newsletter_index(
+    jsonl_path: str | None = None,
+) -> tuple[dict[str, LinkIndexEntry], dict[str, LinkIndexEntry]]:
     """Build indexes mapping URL -> {description, date, title}.
 
     Returns:
@@ -16,24 +27,24 @@ def load_newsletter_index(jsonl_path: str | None = None) -> tuple[dict[str, dict
     """
 
     if not jsonl_path:
-      jsonl_path = JSONL_PATH
+        jsonl_path = JSONL_PATH
 
     if not os.path.exists(jsonl_path):
       raise FileNotFoundError
 
-    exact_index = {}
-    fuzzy_index = {}
+    exact_index: dict[str, LinkIndexEntry] = {}
+    fuzzy_index: dict[str, LinkIndexEntry] = {}
 
     with open(jsonl_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
-            newsletter = json.loads(line)
+            newsletter: dict[str, Any] = json.loads(line)
             date = newsletter.get("date", "")
             for link in newsletter.get("links", []):
                 url = link.get("link", "")
-                data = {
+                data: LinkIndexEntry = {
                     "description": link.get("description", ""),
                     "title": link.get("title", ""),
                     "date": date,
