@@ -100,13 +100,29 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
   - `get_tag_color(tag_name)` - consistent tag colors
 - `duplicates.py` - Duplicate detection
   - `find_duplicates(links)` -> `(exact_groups, fuzzy_groups)`
+- `content_fetcher.py` - Content fetching for articles and videos
+  - `fetch_content(url)` - orchestrates content fetching based on URL type
+  - `fetch_article_content(url)` - uses trafilatura to extract article content
+  - `fetch_video_content(url)` - uses yt-dlp to extract video metadata, chapters, tags, and transcripts (cached 7 days)
+  - `extract_transcript_from_info(info_dict)` - extracts transcript from yt-dlp info (with deduplication)
+  - Exceptions: `RateLimitError` (HTTP 429), `SubtitleFetchError` (network/server errors)
+  - Automatic retry with exponential backoff for transient errors
+  - **Optimization**: Caches only essential data + transcript (10 KB per video, 99% reduction from 1.1 MB)
+    - Filters subtitle languages to en/pl only
+    - Excludes heavy unused data: formats (111 entries), thumbnails, heatmap
+    - Preserves: metadata, chapters, subtitles (en/pl), stats, categories, extracted transcript
+    - Caches extracted transcript to avoid re-fetching on every run
+    - Handles rate limits gracefully (continues without transcript instead of crashing)
 - `llm.py` - LLM API client (OpenAI-compatible)
   - `enrich_link(url, prompt_path)` - calls LLM to generate title, description, tags
+  - `format_content_for_llm(content_data)` - formats content with chapters (videos) or article text for LLM
   - `call_responses_api(...)` - OpenAI Responses API with web search
   - `call_chat_completions_api(...)` - standard Chat Completions API
   - `parse_json_response(text)` - parses JSON from LLM response, decodes HTML entities
-- `llm_cache.py` - Thin wrapper around unified cache for LLM results
+- `llm_cache.py` - Thin wrapper around unified cache for LLM results (no expiry)
   - `get_cached(url)` / `set_cached(url, result)` / `remove_cached(url)`
+- `yt_dlp_cache.py` - Thin wrapper around unified cache for yt-dlp video info (7-day TTL)
+  - `get_cached(url)` / `set_cached(url, info_dict)`
 - `collections_cache.py` - Thin wrapper around unified cache for collections (1-day TTL)
   - `get_collections()` - fetch collections from cache or API
   - `clear_collections_cache()` - clear collections cache
@@ -132,7 +148,8 @@ data/
   last-fetch_cache.txt    # daily cache timestamp (YYYY-MM-DD)
 
 cache/                    # unified cache directory (managed by cache.py)
-  llm.json                # cached LLM enrichment results (per URL)
+  llm.json                # cached LLM enrichment results (per URL, no expiry)
+  yt_dlp.json             # cached yt-dlp video info (per URL, 7-day TTL, ~12 KB per video)
   collections.json        # cached collections list (1-day TTL)
 ```
 

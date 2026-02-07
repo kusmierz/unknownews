@@ -12,7 +12,7 @@ Treść może być dostarczona jako:
 
 W znacznikach XML znajdziesz:
 - Dla artykułów: `<title>`, `<author>`, `<date>`, `<content>`
-- Dla filmów: `<title>`, `<uploader>`, `<duration>`, `<description>`, `<transcript>`
+- Dla filmów: `<title>`, `<uploader>`, `<duration>`, `<chapters>`, `<tags>`, `<description>`, `<transcript>`
 
 ## Zasady anty-halucynacyjne (OBOWIĄZKOWE)
 - Opisuj WYŁĄCZNIE informacje jawnie obecne w treści strony.
@@ -52,15 +52,17 @@ Krok 3: Klasyfikacja (tagi + kategoria) na podstawie Kroku 1.
 
 Wybierz dokładnie jedną, najbardziej pasującą kategorię z listy:
 - AI
-- Design
-- Electronics & DIY
-- Electronics & DIY / Hardware
-- Finance
-- Soft skills
-- Tech
-- Tech / Software Development
-- Tech / Devops
-- Tech / Tools
+- Software Development
+- DevOps & Infrastructure
+- Security & Privacy
+- Data & Databases
+- Product, UX & Design
+- Hardware & DIY
+- Business & Finance
+- Work & Career
+- Science & Society
+- Tools & Resources
+- Other
 
 ### Zasady
 - Jeśli wahasz się między dwiema kategoriami, wybierz bardziej OGÓLNĄ z listy.
@@ -93,7 +95,7 @@ Dla URL: https://writethatblog.substack.com/p/technical-blogging-lessons-learned
   "title": "Czego nauczyli się najlepsi twórcy technicznych blogów? - wnioski z kilkunastu wywiadów",
   "description": "Autor zebrał w jednym miejscu najważniejsze lekcje od kilkunastu znanych blogerów technicznych - od rad dotyczących nawyku pisania, po podejście do kwestii motywacji i kreatywności w pisaniu. Sporo tu przemyśleń o tym, jak znaleźć własny styl i format (wizualizacje, interaktywność, dostępność), jak nie dać się zdominować liczbom, SEO i zbytecznym szerokim tematom, a także jak mądrze podchodzić do feedbacku i krytyki od czytelników. Jeżeli prowadzisz bloga albo publikujesz swoje teksty w jakiejkolwiek innej formie, myślę, że warto zapoznać się z tym tekstem.",
   "tags": ["porady", "blog"],
-  "category": "Tech / Software Development",
+  "category": "Software Development",
   "suggested_category": null
 }
 ```
@@ -115,7 +117,7 @@ Dla URL: https://philna.sh/blog/2026/01/11/javascript-date-calculation/
   "title": "Jak bardzo może się wykrzaczyć obliczanie daty w JavaScript? - bardzo ;)",
   "description": "Autor opisuje pozornie prosty fragment kodu z obliczaniem końca miesiąca, który na zachodnim wybrzeżu USA wygenerował kompletnie absurdalną datę. Jak się domyślasz, chodziło o obsługę stref czasowych. Z tekstu dowiesz się, dlaczego operacje typu setMonth na obiekcie Date potrafią niespodziewanie przepełniać miesiące i co z tym możesz zrobić. W artykule znajdziesz też podpowiedzi, czego używać zamiast tradycyjnego obiektu Date i co robić, gdy ta bardziej nowoczesna metoda nie jest jeszcze u Ciebie dostępna.",
   "tags": ["javascript", "daty", "strefa czasowa"],
-  "category": "Tech / Software Development",
+  "category": "Software Development",
   "suggested_category": null
 }
 ```

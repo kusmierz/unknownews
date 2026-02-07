@@ -4,5 +4,4 @@ python-dotenv
 rich
 openai
 trafilatura
-yt-dlp
-
+yt-dlp[default,curl-cffi]

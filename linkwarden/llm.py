@@ -12,7 +12,7 @@ from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUs
 from openai.types.shared_params import ResponseFormatJSONObject
 
 from .display import console
-from .content_fetcher import fetch_content
+from .content_fetcher import fetch_content, RateLimitError, SubtitleFetchError
 
 DEFAULT_MODEL = "gpt-4o-mini"
 PROMPT_PATH = "prompts/enrich-link.md"
@@ -67,6 +67,24 @@ def format_content_for_llm(content_data: dict) -> str:
             lines.append(f"<duration>{metadata['duration_string']}</duration>")
         if metadata.get('upload_date'):
             lines.append(f"<upload_date>{metadata['upload_date']}</upload_date>")
+
+        # Video chapters
+        if content_data.get('chapters'):
+            lines.append("<chapters>")
+            for chapter in content_data['chapters']:
+                start_time = chapter.get('start_time', 0)
+                title = chapter.get('title', 'Untitled')
+                # Format as MM:SS - Title
+                minutes = int(start_time // 60)
+                seconds = int(start_time % 60)
+                lines.append(f"{minutes:02d}:{seconds:02d} - {title}")
+            lines.append("</chapters>")
+
+        # Video tags
+        if content_data.get('tags'):
+          lines.append("<tags>")
+          lines.append(", ".join(content_data['tags']))
+          lines.append("</tags>")
 
         # Video description
         if content_data.get('text_content'):
@@ -254,7 +272,19 @@ def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3) 
         return None
 
     # Try to fetch content locally
-    content_data = fetch_content(url)
+    try:
+        content_data = fetch_content(url)
+    except RateLimitError as e:
+        console.print(f"[red]✗ Rate limit error: {e}[/red]")
+        console.print("[yellow]  Wait before retrying, or reduce request rate[/yellow]")
+        raise  # Re-raise to fail enrichment command
+    except SubtitleFetchError as e:
+        console.print(f"[yellow]⚠ Subtitle fetch error: {e}[/yellow]")
+        console.print("[dim]  Continuing without transcript...[/dim]")
+        # This shouldn't happen as SubtitleFetchError is caught in fetch_video_content
+        # But if it does, treat as content fetch failure
+        content_data = None
+
     if not content_data:
         console.print(f"[dim]⚠ Content fetch failed, skipping LLM enrichment (models can't fetch data)[/dim]")
         return {"_skipped": True, "_reason": "Content fetch failed"}

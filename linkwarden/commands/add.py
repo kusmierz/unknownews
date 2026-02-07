@@ -82,7 +82,7 @@ def add_link(
     else:
         # Use LLM enrichment
         if show_output:
-            with console.status("Calling LLM...", spinner="dots"):
+            with console.status("Enriching link...", spinner="dots"):
                 result = enrich_link(normalized_url)
         else:
             result = enrich_link(normalized_url)
