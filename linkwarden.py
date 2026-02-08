@@ -38,6 +38,7 @@ from dotenv import load_dotenv
 
 # Import from linkwarden modules
 from linkwarden.display import console
+from linkwarden.api import set_verbose
 from linkwarden.commands import add_link, enrich_links, list_links, remove_duplicates, sync_links
 
 
@@ -105,6 +106,11 @@ def main():
         action="store_true",
         help="Show all unmatched Linkwarden URLs",
     )
+    sync_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show detailed API and matching information",
+    )
 
     # list command
     list_parser = subparsers.add_parser("list", help="List all links grouped by collection")
@@ -114,6 +120,11 @@ def main():
         default=None,
         help="Filter to specific collection ID",
     )
+    list_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show URLs and full descriptions",
+    )
 
     # remove-duplicates command
     dup_parser = subparsers.add_parser("remove-duplicates", help="Find and remove duplicate links across all collections")
@@ -121,6 +132,11 @@ def main():
         "--dry-run",
         action="store_true",
         help="Preview deletions without actually deleting",
+    )
+    dup_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show detailed matching keys and metadata",
     )
 
     # enrich command
@@ -162,6 +178,10 @@ def main():
     # Load environment variables (commands will read LINKWARDEN_URL and LINKWARDEN_TOKEN)
     load_dotenv()
 
+    # Enable verbose API logging if requested
+    if getattr(args, "verbose", False):
+        set_verbose(True)
+
     # add command handles its own header
     if args.command != "add" or args.silent:
         if args.command != "add":
@@ -183,11 +203,12 @@ def main():
             dry_run=args.dry_run,
             limit=args.limit,
             show_unmatched=args.show_unmatched,
+            verbose=args.verbose,
         )
     elif args.command == "list":
-        list_links(collection_id=args.collection)
+        list_links(collection_id=args.collection, verbose=args.verbose)
     elif args.command == "remove-duplicates":
-        remove_duplicates(dry_run=args.dry_run)
+        remove_duplicates(dry_run=args.dry_run, verbose=args.verbose)
     elif args.command == "enrich":
         enrich_links(
             collection_id=args.collection,

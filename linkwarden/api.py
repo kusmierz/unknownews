@@ -1,6 +1,34 @@
 """Linkwarden API client."""
+import time
 import requests
 from .config import get_api_config
+
+_verbose = False
+
+
+def set_verbose(enabled: bool) -> None:
+    """Enable or disable verbose API logging."""
+    global _verbose
+    _verbose = enabled
+
+
+def _log_request(method: str, url: str) -> None:
+    """Log an API request if verbose mode is enabled."""
+    if _verbose:
+        # Show path only (strip base URL)
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        path = parsed.path + (f"?{parsed.query}" if parsed.query else "")
+        print(f"  [API] {method} {path}")
+
+
+def _log_response(response: requests.Response, elapsed: float, item_count: int | None = None) -> None:
+    """Log an API response if verbose mode is enabled."""
+    if _verbose:
+        msg = f"  [API] {response.status_code} ({elapsed:.1f}s)"
+        if item_count is not None:
+            msg += f" — {item_count} items"
+        print(msg)
 
 
 def fetch_all_collections() -> list[dict]:
@@ -10,11 +38,16 @@ def fetch_all_collections() -> list[dict]:
     """
     base_url, token = get_api_config()
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(f"{base_url}/api/v1/collections", headers=headers)
+    url = f"{base_url}/api/v1/collections"
+    _log_request("GET", url)
+    t0 = time.monotonic()
+    response = requests.get(url, headers=headers)
     response.raise_for_status()
     data = response.json()
     # API returns {"response": [...]}
-    return data.get("response", [])
+    result = data.get("response", [])
+    _log_response(response, time.monotonic() - t0, len(result))
+    return result
 
 
 def fetch_collection_links(collection_id: int) -> list[dict]:
@@ -34,12 +67,15 @@ def fetch_collection_links(collection_id: int) -> list[dict]:
         url = f"{base_url}/api/v1/search?collectionId={collection_id}"
         if cursor:
             url += f"&cursor={cursor}"
+        _log_request("GET", url)
+        t0 = time.monotonic()
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         result = response.json()
 
         data = result.get("data", {})
         links = data.get("links", [])
+        _log_response(response, time.monotonic() - t0, len(links))
         if not links:
             break
 
@@ -104,7 +140,10 @@ def update_link(
     }
 
     url = f"{base_url}/api/v1/links/{link_id}"
+    _log_request("PUT", url)
+    t0 = time.monotonic()
     response = requests.put(url, headers=headers, json=payload)
+    _log_response(response, time.monotonic() - t0)
     if not response.ok:
         print(f"    API Error: {response.status_code} - {response.text}")
     response.raise_for_status()
@@ -121,7 +160,11 @@ def delete_link(link_id: int) -> bool:
     """
     base_url, token = get_api_config()
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.delete(f"{base_url}/api/v1/links/{link_id}", headers=headers)
+    url = f"{base_url}/api/v1/links/{link_id}"
+    _log_request("DELETE", url)
+    t0 = time.monotonic()
+    response = requests.delete(url, headers=headers)
+    _log_response(response, time.monotonic() - t0)
     response.raise_for_status()
     return True
 
@@ -162,7 +205,11 @@ def create_link(
         "tags": [{"name": t} for t in tags],
     }
 
-    response = requests.post(f"{base_url}/api/v1/links", headers=headers, json=payload)
+    url = f"{base_url}/api/v1/links"
+    _log_request("POST", url)
+    t0 = time.monotonic()
+    response = requests.post(url, headers=headers, json=payload)
+    _log_response(response, time.monotonic() - t0)
     if not response.ok:
         raise Exception(f"API Error: {response.status_code} - {response.text}")
     return response.json()

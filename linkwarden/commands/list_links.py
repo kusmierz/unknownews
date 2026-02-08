@@ -13,13 +13,14 @@ from ..display import console, get_tag_color
 from ..duplicates import find_duplicates
 
 
-def list_links(collection_id: int | None = None) -> None:
+def list_links(collection_id: int | None = None, verbose: bool = False) -> None:
     """List all links grouped by collection.
 
     Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
 
     Args:
         collection_id: If provided, only list links from this collection
+        verbose: If True, show URLs and full descriptions
     """
     base_url, _ = get_api_config()
 
@@ -67,10 +68,11 @@ def list_links(collection_id: int | None = None) -> None:
             tags = [t.get("name", "") for t in link.get("tags", []) if t.get("name")]
             link_url = f"{base_url}/preserved/{link_id}?format=4"
 
-            if len(name) > name_max:
-                name = name[:name_max - 3] + "..."
-            if len(desc) > desc_max:
-                desc = desc[:desc_max - 3] + "..."
+            if not verbose:
+                if len(name) > name_max:
+                    name = name[:name_max - 3] + "..."
+                if len(desc) > desc_max:
+                    desc = desc[:desc_max - 3] + "..."
 
             # Name line with tags
             line = Text()
@@ -81,6 +83,10 @@ def list_links(collection_id: int | None = None) -> None:
                 for tag in tags:
                     line.append(f"[{tag}] ", style=f"dim {get_tag_color(tag)}")
             console.print(line)
+
+            if verbose:
+                actual_url = link.get("url", "")
+                console.print(f"            [dim]{actual_url}[/dim]")
 
             if desc:
                 console.print(f"            [dim]{desc}[/dim]")

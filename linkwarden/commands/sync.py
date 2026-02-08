@@ -16,6 +16,7 @@ def sync_links(
     dry_run: bool = False,
     limit: int = 0,
     show_unmatched: bool = False,
+    verbose: bool = False,
 ) -> None:
     """Main sync logic: match URLs and update Linkwarden.
 
@@ -51,6 +52,8 @@ def sync_links(
             linkwarden_links = fetch_all_links(silent=not dry_run)
 
     console.print(f"[bold]{len(linkwarden_links)}[/bold] links, [bold]{len(newsletter_index)}[/bold] indexed")
+    if verbose:
+        console.print(f"  [dim]Index: {len(newsletter_index)} exact, {len(newsletter_fuzzy_index)} fuzzy[/dim]")
 
     # Match and prepare updates
     matches = []
@@ -127,6 +130,8 @@ def sync_links(
 
         if not new_tags and not description_needs_update and not name_needs_update and not url_needs_update:
             skipped += 1
+            if verbose:
+                console.print(f"  [dim]skip #{link_id} — already up-to-date[/dim]")
             continue
 
         # Prepare updates
@@ -142,6 +147,8 @@ def sync_links(
         fuzzy_label = " [cyan]~[/cyan]" if match_type == "fuzzy" else ""
         display_name = html.unescape(link_name)
         console.print(f"{dry_label}[green]+[/green] #{link_id}{fuzzy_label}  [bold]{display_name}[/bold]")
+        if verbose and normalized_url != link_url:
+            console.print(f"    [dim]normalized: {normalized_url}[/dim]")
 
         if name_needs_update:
             show_diff(html.unescape(link_name), html.unescape(new_name), indent="    ")

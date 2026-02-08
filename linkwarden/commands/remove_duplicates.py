@@ -6,13 +6,14 @@ from ..display import console, show_diff
 from ..duplicates import find_duplicates
 
 
-def remove_duplicates(dry_run: bool = False) -> None:
+def remove_duplicates(dry_run: bool = False, verbose: bool = False) -> None:
     """Fetch all links across all collections, find duplicates, and remove them.
 
     Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
 
     Args:
         dry_run: If True, preview duplicates without deleting
+        verbose: If True, show extra metadata per duplicate
     """
     base_url, _ = get_api_config()
     dry_label = "[dim](dry-run)[/dim] " if dry_run else ""
@@ -38,6 +39,10 @@ def remove_duplicates(dry_run: bool = False) -> None:
         emoji = "🎯" if match_type == "exact" else "🔍"
 
         console.print(f"{emoji} [blue][link={key}]{key[:70]}[/link][/blue]")
+        if verbose:
+            match_key = group.get("normalized_url") or group.get("path_key", "")
+            label = "normalized_url" if "normalized_url" in group else "path_key"
+            console.print(f"  [dim]{label}: {match_key}[/dim]")
 
         first_url = links[0].get("url", "")
         for i, link in enumerate(links):
@@ -53,6 +58,10 @@ def remove_duplicates(dry_run: bool = False) -> None:
                 console.print(f"  [red]delete[/red] #{link_id:<5} [link={ui_url}]{name}[/link] [dim][{coll}][/dim]")
                 if link_url != first_url:
                     show_diff(first_url, link_url, indent="         ", muted=True)
+            if verbose:
+                tag_count = len(link.get("tags", []))
+                created = link.get("createdAt", "?")
+                console.print(f"           [dim]{tag_count} tags, created {created}[/dim]")
         console.print()
 
     # Confirm and delete
