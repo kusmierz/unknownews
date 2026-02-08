@@ -12,7 +12,7 @@ from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUs
 from openai.types.shared_params import ResponseFormatJSONObject
 
 from .display import console
-from .content_fetcher import fetch_content, RateLimitError, SubtitleFetchError
+from .content_fetcher import fetch_content, RateLimitError
 
 DEFAULT_MODEL = "gpt-4o-mini"
 PROMPT_PATH = "prompts/enrich-link.md"
@@ -194,8 +194,6 @@ def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: in
     ))
     console.print("")
 
-    exit()
-
   # Initialize client
   client_kwargs = {"api_key": api_key}
   if base_url:
@@ -323,13 +321,6 @@ def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3, 
         console.print(f"[red]✗ Rate limit error: {e}[/red]")
         console.print("[yellow]  Wait before retrying, or reduce request rate[/yellow]")
         raise  # Re-raise to fail enrichment command
-    except SubtitleFetchError as e:
-        console.print(f"[yellow]⚠ Subtitle fetch error: {e}[/yellow]")
-        console.print("[dim]  Continuing without transcript...[/dim]")
-        # This shouldn't happen as SubtitleFetchError is caught in fetch_video_content
-        # But if it does, treat as content fetch failure
-        content_data = None
-
     if not content_data:
         console.print(f"[dim]⚠ Content fetch failed, skipping LLM enrichment (models can't fetch data)[/dim]")
         return {"_skipped": True, "_reason": "Content fetch failed"}
