@@ -75,6 +75,11 @@ def main():
         action="store_true",
         help="No output, just exit code (ignored with --dry-run)",
     )
+    add_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show detailed LLM request information",
+    )
 
     # sync command (existing functionality)
     sync_parser = subparsers.add_parser("sync", help="Sync newsletter descriptions to Linkwarden")
@@ -142,6 +147,11 @@ def main():
         default=0,
         help="Limit number of links to process (0 = no limit)",
     )
+    enrich_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show detailed LLM request information",
+    )
 
     args = parser.parse_args()
 
@@ -164,6 +174,7 @@ def main():
             dry_run=args.dry_run,
             unread=args.unread,
             silent=args.silent,
+            verbose=args.verbose,
         )
         sys.exit(exit_code)
     elif args.command == "sync":
@@ -183,6 +194,7 @@ def main():
             dry_run=args.dry_run,
             force=args.force,
             limit=args.limit,
+            verbose=args.verbose,
         )
 
 

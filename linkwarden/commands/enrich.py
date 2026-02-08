@@ -68,6 +68,7 @@ def enrich_links(
     dry_run: bool = False,
     force: bool = False,
     limit: int = 0,
+    verbose: bool = False,
 ) -> None:
     """Enrich links using LLM to generate titles, descriptions, and tags.
 
@@ -79,6 +80,7 @@ def enrich_links(
         dry_run: If True, preview changes without updating
         force: If True, regenerate all fields even if not empty
         limit: Maximum number of links to process (0 = no limit)
+        verbose: If True, show detailed LLM request information
     """
     base_url, _ = get_api_config()
 
@@ -151,7 +153,7 @@ def enrich_links(
             # Fetch content and call LLM
             try:
                 with console.status("  Enriching...", spinner="dots"):
-                    result = enrich_link(link_url, prompt_path)
+                    result = enrich_link(link_url, prompt_path, verbose=verbose)
                 if result and not result.get("_skipped"):
                     set_cached(link_url, result)
             except RateLimitError as e:
@@ -206,6 +208,12 @@ def enrich_links(
             preserved = ", ".join(t.get("name", "") for t in system_tags)
             console.print(f"  [dim]preserved: {preserved}[/dim]")
 
+        if verbose:
+            existing_count = len(system_tags) if system_tags else 0
+            new_count = len(new_tags) if new_tags else 0
+            total = existing_count + new_count
+            console.print(f"  [dim]Tags: {existing_count} existing + {new_count} new → {total} total[/dim]")
+
         # Perform update
         if not dry_run:
             try:
@@ -218,6 +226,8 @@ def enrich_links(
                     dry_run=False,
                 )
                 enriched += 1
+                if verbose:
+                    console.print(f"  [dim]Updated link #{link_id} successfully[/dim]")
                 # Keep cache after successful update to:
                 # 1. Allow dry-run → real-run workflow (same values)
                 # 2. Avoid redundant LLM calls for same URL

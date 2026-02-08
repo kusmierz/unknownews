@@ -301,7 +301,7 @@ def parse_json3_content(json3_text: str) -> Optional[str]:
         return None
 
 
-def fetch_subtitle_content(url: str, format: str, retry_count: int = 0) -> Optional[str]:
+def fetch_subtitle_content(url: str, format: str, retry_count: int = 0, verbose: bool = False) -> Optional[str]:
     """
     Fetch subtitle file from URL and parse based on format.
 
@@ -333,8 +333,11 @@ def fetch_subtitle_content(url: str, format: str, retry_count: int = 0) -> Optio
     except requests.exceptions.Timeout:
         # Retry transient errors
         if retry_count < TRANSCRIPT_RETRIES_MAX:
-            time.sleep(TRANSCRIPT_RETRIES_DELAY_S * (2 ** retry_count))  # Exponential backoff
-            return fetch_subtitle_content(url, format, retry_count + 1)
+            backoff = TRANSCRIPT_RETRIES_DELAY_S * (2 ** retry_count)
+            if verbose:
+                console.print(f"[dim]  Subtitle retry {retry_count + 1}/{TRANSCRIPT_RETRIES_MAX} (backoff: {backoff}s)[/dim]")
+            time.sleep(backoff)
+            return fetch_subtitle_content(url, format, retry_count + 1, verbose=verbose)
         raise SubtitleFetchError(f"Timeout fetching subtitle from {url}")
 
     except requests.exceptions.HTTPError as e:
@@ -343,8 +346,11 @@ def fetch_subtitle_content(url: str, format: str, retry_count: int = 0) -> Optio
         elif 500 <= e.response.status_code < 600:
             # Retry server errors
             if retry_count < TRANSCRIPT_RETRIES_MAX:
-                time.sleep(TRANSCRIPT_RETRIES_DELAY_S * (2 ** retry_count))  # Exponential backoff
-                return fetch_subtitle_content(url, format, retry_count + 1)
+                backoff = TRANSCRIPT_RETRIES_DELAY_S * (2 ** retry_count)
+                if verbose:
+                    console.print(f"[dim]  Subtitle retry {retry_count + 1}/{TRANSCRIPT_RETRIES_MAX} (backoff: {backoff}s)[/dim]")
+                time.sleep(backoff)
+                return fetch_subtitle_content(url, format, retry_count + 1, verbose=verbose)
             raise SubtitleFetchError(f"Server error ({e.response.status_code}) fetching subtitle from {url}")
         elif e.response.status_code == 404:
             return None  # Subtitle not found, OK
@@ -354,12 +360,15 @@ def fetch_subtitle_content(url: str, format: str, retry_count: int = 0) -> Optio
     except requests.RequestException as e:
         # Retry network errors
         if retry_count < TRANSCRIPT_RETRIES_MAX:
-            time.sleep(TRANSCRIPT_RETRIES_DELAY_S * (2 ** retry_count))  # Exponential backoff
-            return fetch_subtitle_content(url, format, retry_count + 1)
+            backoff = TRANSCRIPT_RETRIES_DELAY_S * (2 ** retry_count)
+            if verbose:
+                console.print(f"[dim]  Subtitle retry {retry_count + 1}/{TRANSCRIPT_RETRIES_MAX} (backoff: {backoff}s)[/dim]")
+            time.sleep(backoff)
+            return fetch_subtitle_content(url, format, retry_count + 1, verbose=verbose)
         raise SubtitleFetchError(f"Network error fetching subtitle: {e}")
 
 
-def _try_extract_from_subtitle_list(subtitle_list: List[Dict]) -> Optional[str]:
+def _try_extract_from_subtitle_list(subtitle_list: List[Dict], verbose: bool = False) -> Optional[str]:
     """
     Try to extract transcript from a subtitle list.
 
@@ -386,8 +395,10 @@ def _try_extract_from_subtitle_list(subtitle_list: List[Dict]) -> Optional[str]:
             if subtitle.get('ext') == format_ext:
                 url = subtitle.get('url')
                 if url:
+                    if verbose:
+                        console.print(f"[dim]  Trying subtitle format: {format_ext}[/dim]")
                     # Let exceptions propagate (RateLimitError, SubtitleFetchError)
-                    text = fetch_subtitle_content(url, format_ext)
+                    text = fetch_subtitle_content(url, format_ext, verbose=verbose)
                     if text:
                         return text
 
@@ -399,20 +410,23 @@ def _try_extract_from_subtitle_list(subtitle_list: List[Dict]) -> Optional[str]:
             continue
 
         if url:
+            if verbose:
+                console.print(f"[dim]  Trying subtitle format (fallback): {format_ext}[/dim]")
             # Let exceptions propagate
-            text = fetch_subtitle_content(url, format_ext)
+            text = fetch_subtitle_content(url, format_ext, verbose=verbose)
             if text:
                 return text
 
     return None
 
 
-def _try_languages(subtitle_dict: Dict, original_lang: Optional[str] = None) -> Optional[str]:
+def _try_languages(subtitle_dict: Dict, original_lang: Optional[str] = None, verbose: bool = False) -> Optional[str]:
     """Try preferred languages: original → en → pl.
 
     Args:
         subtitle_dict: Dict mapping language codes to subtitle lists
         original_lang: Optional original language code from video metadata
+        verbose: If True, show detailed extraction info
 
     Returns:
         Transcript text (truncated to limit) or None
@@ -427,11 +441,18 @@ def _try_languages(subtitle_dict: Dict, original_lang: Optional[str] = None) -> 
         langs_to_try.append(original_lang)
     langs_to_try.extend(TRANSCRIPT_LANG_PRIORITY)  # ['en', 'pl']
 
+    available = [l for l in langs_to_try if l in subtitle_dict]
+    if verbose:
+        console.print(f"[dim]  Subtitle languages available: {', '.join(available) if available else 'none'}[/dim]")
+        console.print(f"[dim]  Trying order: {' → '.join(langs_to_try)}[/dim]")
+
     # Try each language in priority order
     for lang in langs_to_try:
         if lang in subtitle_dict:
+            if verbose:
+                console.print(f"[dim]  Trying language: {lang}[/dim]")
             # Let exceptions propagate
-            text = _try_extract_from_subtitle_list(subtitle_dict[lang])
+            text = _try_extract_from_subtitle_list(subtitle_dict[lang], verbose=verbose)
             if text:
                 text, was_truncated = truncate_content(text, TRANSCRIPT_MAX_CHARS)
                 if was_truncated:
@@ -442,7 +463,7 @@ def _try_languages(subtitle_dict: Dict, original_lang: Optional[str] = None) -> 
     return None
 
 
-def extract_transcript_from_info(info_dict: Dict) -> Optional[str]:
+def extract_transcript_from_info(info_dict: Dict, verbose: bool = False) -> Optional[str]:
     """
     Extract transcript from yt-dlp info dictionary.
 
@@ -452,6 +473,7 @@ def extract_transcript_from_info(info_dict: Dict) -> Optional[str]:
 
     Args:
         info_dict: yt-dlp info dictionary with subtitle metadata
+        verbose: If True, show detailed extraction info
 
     Returns:
         Transcript text (truncated to limit) or None
@@ -463,22 +485,32 @@ def extract_transcript_from_info(info_dict: Dict) -> Optional[str]:
     # Get original language from video metadata
     original_lang = info_dict.get('language')
 
+    manual_langs = list(info_dict.get('subtitles', {}).keys())
+    auto_langs = list(info_dict.get('automatic_captions', {}).keys())
+    if verbose:
+        console.print(f"[dim]  Subtitles: {', '.join(manual_langs) if manual_langs else 'none'} (manual), {', '.join(auto_langs) if auto_langs else 'none'} (auto)[/dim]")
+
     # Try manual subtitles first (higher quality)
     # Let exceptions propagate (RateLimitError, SubtitleFetchError)
-    text = _try_languages(info_dict.get('subtitles', {}), original_lang)
+    if verbose and manual_langs:
+        console.print("[dim]  Trying manual subtitles first...[/dim]")
+    text = _try_languages(info_dict.get('subtitles', {}), original_lang, verbose=verbose)
     if text:
         return text
 
     # Try auto-generated captions (lower quality)
-    return _try_languages(info_dict.get('automatic_captions', {}), original_lang)
+    if verbose and auto_langs:
+        console.print("[dim]  Trying auto-generated captions...[/dim]")
+    return _try_languages(info_dict.get('automatic_captions', {}), original_lang, verbose=verbose)
 
 
-def fetch_article_content(url: str) -> Optional[Dict[str, Any]]:
+def fetch_article_content(url: str, verbose: bool = False) -> Optional[Dict[str, Any]]:
     """
     Fetch article content using trafilatura.
 
     Args:
         url: Article URL
+        verbose: If True, show detailed fetch info
 
     Returns:
         Dict with article data or None on failure
@@ -498,6 +530,9 @@ def fetch_article_content(url: str) -> Optional[Dict[str, Any]]:
         if not downloaded:
             return None
 
+        if verbose:
+            console.print(f"[dim]  Article downloaded ({len(downloaded):,} chars)[/dim]")
+
         # Extract with metadata
         metadata = trafilatura.extract_metadata(downloaded)
         text = trafilatura.extract(downloaded)
@@ -505,12 +540,26 @@ def fetch_article_content(url: str) -> Optional[Dict[str, Any]]:
         if not text:
             return None
 
+        if verbose and metadata:
+            meta_parts = []
+            if metadata.author:
+                meta_parts.append(f"author={metadata.author}")
+            if metadata.date:
+                meta_parts.append(f"date={metadata.date}")
+            if metadata.sitename:
+                meta_parts.append(f"site={metadata.sitename}")
+            if meta_parts:
+                console.print(f"[dim]  Metadata: {', '.join(meta_parts)}[/dim]")
+
         # Truncate to limit
         original_length = len(text)
         text, was_truncated = truncate_content(text, ARTICLE_MAX_CHARS)
 
         if was_truncated:
-            console.print(f"[dim]  ℹ Content truncated: {original_length} → {len(text)} chars[/dim]")
+            console.print(f"[dim]  ℹ Content truncated: {original_length:,} → {len(text):,} chars[/dim]")
+
+        if verbose:
+            console.print(f"[dim]  Extracted {len(text):,} chars of text[/dim]")
 
         result = {
             "title": metadata.title if metadata else None,
@@ -528,7 +577,7 @@ def fetch_article_content(url: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def fetch_video_content(url: str) -> Optional[Dict[str, Any]]:
+def fetch_video_content(url: str, verbose: bool = False) -> Optional[Dict[str, Any]]:
     """
     Fetch video metadata and transcript using yt-dlp.
 
@@ -565,6 +614,11 @@ def fetch_video_content(url: str) -> Optional[Dict[str, Any]]:
             # Use cached transcript if available
             if cached_data.get('_cached_transcript') is not None:
                 console.print("[dim]  ℹ Using cached transcript[/dim]")
+            if verbose:
+                chapters = cached_data.get('chapters') or []
+                tags = cached_data.get('tags') or []
+                console.print(f"[dim]  Chapters: {len(chapters)}[/dim]")
+                console.print(f"[dim]  Tags: {len(tags)}[/dim]")
             info = cached_data
             transcript = cached_data.get('_cached_transcript')  # May be None if no transcript
         else:
@@ -587,12 +641,24 @@ def fetch_video_content(url: str) -> Optional[Dict[str, Any]]:
             if not info:
                 return None
 
+            if verbose:
+                video_id = info.get('id', 'unknown')
+                console.print(f"[dim]  yt-dlp: extracted info for {video_id}[/dim]")
+
             # Filter to essential data only before caching
             # Also filter subtitle languages to only en/pl to reduce cache size
             subtitles = info.get('subtitles', {})
             auto_captions = info.get('automatic_captions', {})
             filtered_subtitles = {lang: subtitles[lang] for lang in ['en', 'pl'] if lang in subtitles}
             filtered_auto_captions = {lang: auto_captions[lang] for lang in ['en', 'pl'] if lang in auto_captions}
+
+            if verbose:
+                num_formats = len(info.get('formats', []))
+                num_sub_langs = len(subtitles)
+                num_auto_langs = len(auto_captions)
+                kept_subs = list(filtered_subtitles.keys())
+                kept_auto = list(filtered_auto_captions.keys())
+                console.print(f"[dim]  Filtered: {num_formats} formats, {num_sub_langs + num_auto_langs} subtitle langs → {', '.join(kept_subs + kept_auto) or 'none'}[/dim]")
 
             filtered_info = {
                 # Essential metadata
@@ -619,10 +685,16 @@ def fetch_video_content(url: str) -> Optional[Dict[str, Any]]:
                 'tags': info.get('tags'),
             }
 
+            if verbose:
+                chapters = filtered_info.get('chapters') or []
+                tags = filtered_info.get('tags') or []
+                console.print(f"[dim]  Chapters: {len(chapters)}[/dim]")
+                console.print(f"[dim]  Tags: {len(tags)}[/dim]")
+
             # Extract transcript (before caching, so we can cache it too)
             transcript = None
             try:
-                transcript = extract_transcript_from_info(filtered_info)
+                transcript = extract_transcript_from_info(filtered_info, verbose=verbose)
                 if transcript:
                     console.print(f"[dim]  ℹ Transcript extracted ({len(transcript)} chars)[/dim]")
             except RateLimitError as e:
@@ -675,7 +747,7 @@ def fetch_video_content(url: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def fetch_content(url: str) -> Optional[Dict[str, Any]]:
+def fetch_content(url: str, verbose: bool = False) -> Optional[Dict[str, Any]]:
     """
     Orchestrate content fetching based on URL type.
 
@@ -706,7 +778,7 @@ def fetch_content(url: str) -> Optional[Dict[str, Any]]:
     try:
         # Detect content type
         if is_video_url(url):
-            video_data = fetch_video_content(url)
+            video_data = fetch_video_content(url, verbose=verbose)
             if not video_data:
                 return None
 
@@ -724,7 +796,7 @@ def fetch_content(url: str) -> Optional[Dict[str, Any]]:
             }
         else:
             # Article
-            article_data = fetch_article_content(url)
+            article_data = fetch_article_content(url, verbose=verbose)
             if not article_data:
                 return None
 

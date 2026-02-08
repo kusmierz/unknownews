@@ -35,8 +35,9 @@ def format_content_for_llm(content_data: dict) -> str:
     Returns:
         XML-formatted string with content data
     """
-    lines = ["<fetched_content>"]
+    lines = ["<fetched_content>", ""]
     lines.append(f"<content_type>{content_data['content_type']}</content_type>")
+    lines.append("")
     lines.append(f"<url>{content_data['url']}</url>")
 
     if content_data.get('title'):
@@ -140,7 +141,7 @@ def parse_json_response(response_text: str) -> dict | None:
         return None
 
 
-def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: int = 1) -> str | None:
+def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: int = 1, verbose: bool = False) -> str | None:
   api_key = os.environ.get("OPENAI_API_KEY")
   model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
   base_url = os.environ.get("OPENAI_BASE_URL")
@@ -150,13 +151,56 @@ def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: in
     console.print("[red]Error: OPENAI_API_KEY not set[/red]")
     return None
 
+  use_responses_api = os.environ.get("OPENAI_USE_RESPONSE_API", "").lower() in ("1", "true", "yes")
+
+  # Show detailed request info if verbose flag is set
+  if verbose:
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.markdown import Markdown
+
+    # Configuration table
+    config_table = Table(show_header=False, box=None, padding=(0, 2))
+    config_table.add_column("Setting", style="cyan")
+    config_table.add_column("Value", style="white")
+    config_table.add_row("Model", model)
+    config_table.add_row("Base URL", base_url or 'https://api.openai.com/v1')
+    config_table.add_row("Service Tier", service_tier or 'auto')
+    config_table.add_row("Use Responses API", str(use_responses_api))
+
+    # Display configuration panel
+    console.print("\n")
+    console.print(Panel(
+        config_table,
+        title="[bold yellow]LLM Configuration[/bold yellow]",
+        border_style="yellow",
+    ))
+
+    # Display system prompt panel with markdown rendering
+    if system_prompt:
+        console.print(Panel(
+            Markdown(system_prompt),
+            title="[bold cyan]System Prompt[/bold cyan]",
+            border_style="cyan",
+            expand=False,
+        ))
+
+    # Display user prompt panel with markdown rendering
+    console.print(Panel(
+        user_prompt,
+        title="[bold cyan]User Prompt[/bold cyan]",
+        border_style="cyan",
+        expand=False,
+    ))
+    console.print("")
+
+    exit()
+
   # Initialize client
   client_kwargs = {"api_key": api_key}
   if base_url:
     client_kwargs["base_url"] = base_url
   client = OpenAI(**client_kwargs)
-
-  use_responses_api = os.environ.get("OPENAI_USE_RESPONSE_API", "").lower() in ("1", "true", "yes")
 
   # Call API with retry logic
   for attempt in range(max_retries):
@@ -243,7 +287,7 @@ def call_chat_completions_api(client: OpenAI, model: str, user_prompt: str, syst
     return response.choices[0].message.content
 
 
-def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3) -> dict | None:
+def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3, verbose: bool = False) -> dict | None:
     """Call LLM to enrich a link with title, description, and tags.
 
     Uses OpenAI-compatible API. Configure via environment variables:
@@ -256,6 +300,7 @@ def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3) 
         url: The URL to enrich
         prompt_path: Path to the prompt template file
         max_retries: Maximum number of retries on API errors
+        verbose: If True, show detailed LLM request information
 
     Returns:
         Dict with keys: title, description, tags (list), category, suggested_category
@@ -273,7 +318,7 @@ def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3) 
 
     # Try to fetch content locally
     try:
-        content_data = fetch_content(url)
+        content_data = fetch_content(url, verbose=verbose)
     except RateLimitError as e:
         console.print(f"[red]✗ Rate limit error: {e}[/red]")
         console.print("[yellow]  Wait before retrying, or reduce request rate[/yellow]")
@@ -293,14 +338,23 @@ def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3) 
     console.print(f"[dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
 
     # Call API
-    response_text = call_api(formatted_content, prompt_template)
+    response_text = call_api(formatted_content, prompt_template, verbose=verbose)
 
     if not response_text:
         console.print("[yellow]Empty response from API[/yellow]")
         return None
 
+    if verbose:
+        console.print(f"[dim]  LLM response: {len(response_text):,} chars[/dim]")
+
     result = parse_json_response(response_text)
     if result:
+        if verbose and not result.get("_skipped"):
+            title_len = len(result.get("title", ""))
+            desc_len = len(result.get("description", ""))
+            num_tags = len(result.get("tags", []))
+            cat = result.get("category", "")
+            console.print(f"[dim]  Parsed: title({title_len} chars), desc({desc_len} chars), {num_tags} tags, category={cat}[/dim]")
         return result
     console.print("[yellow]Failed to parse LLM response[/yellow]")
 

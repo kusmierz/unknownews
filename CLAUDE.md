@@ -46,6 +46,7 @@ python linkwarden.py enrich                       # enrich empty fields only
 python linkwarden.py enrich --collection 14       # specific collection
 python linkwarden.py enrich --force               # regenerate all fields
 python linkwarden.py enrich --limit 5             # limit processed (including failures)
+python linkwarden.py enrich --verbose             # show detailed LLM request information
 ```
 
 ## Architecture

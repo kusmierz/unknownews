@@ -13,6 +13,7 @@ def add_link(
     dry_run: bool = False,
     unread: bool = False,
     silent: bool = False,
+    verbose: bool = False,
 ) -> int:
     """Add a URL to Linkwarden with enrichment from newsletter or LLM.
 
@@ -22,6 +23,7 @@ def add_link(
         dry_run: If True, preview without adding
         unread: If True, add "unread" tag
         silent: If True, no output (ignored with dry_run)
+        verbose: If True, show detailed LLM request information
 
     Returns:
         Exit code (0 = success, 1 = error)
@@ -83,9 +85,9 @@ def add_link(
         # Use LLM enrichment
         if show_output:
             with console.status("Enriching link...", spinner="dots"):
-                result = enrich_link(normalized_url)
+                result = enrich_link(normalized_url, verbose=verbose)
         else:
-            result = enrich_link(normalized_url)
+            result = enrich_link(normalized_url, verbose=verbose)
 
         if not result:
             if show_output:
