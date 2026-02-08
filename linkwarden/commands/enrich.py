@@ -8,7 +8,7 @@ from ..collections_cache import get_collections
 from ..config import get_api_config
 from ..content_fetcher import RateLimitError
 from ..display import console, get_tag_color
-from ..llm import enrich_link
+from ..enrich_llm import enrich_link
 from ..tag_utils import has_real_tags, get_system_tags
 
 

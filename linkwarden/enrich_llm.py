@@ -1,0 +1,134 @@
+"""Enrichment-specific LLM orchestration — fetches content, calls LLM, parses results."""
+
+import html
+import json
+import re
+from pathlib import Path
+
+from .llm import call_api
+from .content_fetcher import fetch_content, format_content_for_llm, RateLimitError
+from . import llm_cache
+from .display import console
+
+PROMPT_PATH = "prompts/enrich-link.md"
+
+
+def load_prompt(prompt_path: str) -> str:
+    """Load prompt template from file."""
+    path = Path(prompt_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Prompt file not found: {prompt_path}")
+    return path.read_text(encoding="utf-8")
+
+
+def parse_json_response(response_text: str) -> dict | None:
+    """Parse JSON from LLM response.
+
+    Handles responses that may include Markdown code blocks.
+    Returns dict with keys: title, description, tags, category
+    """
+    if not response_text:
+        return None
+
+    # Try to extract JSON from Markdown code block
+    json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
+    if json_match:
+        json_str = json_match.group(1).strip()
+    else:
+        # Try to parse the whole response as JSON
+        json_str = response_text.strip()
+
+    try:
+        data = json.loads(json_str)
+        # LLM returns null when content can't be fetched
+        if data is None:
+            return {"_skipped": True, "_reason": "LLM couldn't access content"}
+        # Decode HTML entities (e.g., &#39; -> ')
+        title = html.unescape(data.get("title", "") or "")
+        description = html.unescape(data.get("description", "") or "")
+        tags = [html.unescape(t) for t in data.get("tags", [])]
+        return {
+            "title": title,
+            "description": description,
+            "tags": tags,
+            "category": data.get("category", ""),
+            "suggested_category": data.get("suggested_category"),
+        }
+    except json.JSONDecodeError as e:
+        console.print(f"[yellow]JSON parse error: {e}[/yellow]")
+        return None
+
+
+def enrich_link(url: str, prompt_path: str | None = None, verbose: bool = False) -> dict | None:
+    """Call LLM to enrich a link with title, description, and tags.
+
+    Uses OpenAI-compatible API. Configure via environment variables:
+    - OPENAI_API_KEY: API key (required)
+    - OPENAI_BASE_URL: Base URL (optional, for Groq/other providers)
+    - OPENAI_MODEL: Model name (default: gpt-4o-mini)
+    - OPENAI_USE_RESPONSE_API: Set to "1" to use Responses API
+
+    Args:
+        url: The URL to enrich
+        prompt_path: Path to the prompt template file
+        verbose: If True, show detailed LLM request information
+
+    Returns:
+        Dict with keys: title, description, tags (list), category, suggested_category
+        Returns None on failure
+    """
+    # Check cache first
+    cached_result = llm_cache.get_cached(url)
+    if cached_result is not None:
+        if verbose:
+            console.print("[dim]✓ Using cached LLM result[/dim]")
+        return cached_result
+
+    if not prompt_path:
+      prompt_path = PROMPT_PATH
+
+    # Load prompt template
+    try:
+        prompt_template = load_prompt(prompt_path)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        return None
+
+    # Try to fetch content locally
+    try:
+        content_data = fetch_content(url, verbose=verbose)
+    except RateLimitError as e:
+        console.print(f"[red]✗ Rate limit error: {e}[/red]")
+        console.print("[yellow]  Wait before retrying, or reduce request rate[/yellow]")
+        raise  # Re-raise to fail enrichment command
+    if not content_data:
+        console.print(f"[dim]⚠ Content fetch failed, skipping LLM enrichment (models can't fetch data)[/dim]")
+        return {"_skipped": True, "_reason": "Content fetch failed"}
+
+    formatted_content = format_content_for_llm(content_data)
+    console.print(f"[dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
+
+    # Call API
+    response_text = call_api(formatted_content, prompt_template, verbose=verbose)
+
+    if not response_text:
+        console.print("[yellow]Empty response from API[/yellow]")
+        return None
+
+    if verbose:
+        console.print(f"[dim]  LLM response: {len(response_text):,} chars[/dim]")
+
+    result = parse_json_response(response_text)
+    if result:
+        if verbose and not result.get("_skipped"):
+            title_len = len(result.get("title", ""))
+            desc_len = len(result.get("description", ""))
+            num_tags = len(result.get("tags", []))
+            cat = result.get("category", "")
+            console.print(f"[dim]  Parsed: title({title_len} chars), desc({desc_len} chars), {num_tags} tags, category={cat}[/dim]")
+        # Cache the result
+        llm_cache.set_cached(url, result)
+        return result
+    console.print("[yellow]Failed to parse LLM response[/yellow]")
+
+    return None
