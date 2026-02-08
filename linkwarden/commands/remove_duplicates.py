@@ -1,6 +1,6 @@
 """Remove duplicates command."""
 
-from ..api import fetch_all_links, delete_link
+from ..links import delete_link, fetch_all_links
 from ..config import get_api_config
 from ..display import console, show_diff
 from ..duplicates import find_duplicates

@@ -86,10 +86,12 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
 - `api.py` - Linkwarden API client (self-sustainable, reads credentials from environment)
   - `fetch_all_collections()` - get all collections
   - `fetch_collection_links(collection_id)` - get links from collection (paginated)
-  - `fetch_all_links(silent)` - get all links from all collections
   - `update_link(link, new_name, new_url, new_description, new_tags, dry_run)` - update link via PUT
   - `create_link(url, name, description, tags, collection_id)` - create link via POST
   - `delete_link(link_id)` - delete link
+- `links.py` - Link operations facade (re-exports API functions + orchestration)
+  - `fetch_all_links(silent)` - get all links from all collections (uses collections cache)
+  - Re-exports: `fetch_collection_links`, `update_link`, `create_link`, `delete_link`
 - `url_utils.py` - URL normalization and matching
   - `normalize_url(url)` - removes fragments, tracking params, normalizes http->https
   - `get_url_path_key(url)` - extracts domain+path for fuzzy matching

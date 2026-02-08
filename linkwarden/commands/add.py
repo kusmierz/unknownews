@@ -1,6 +1,6 @@
 """Add link command - adds a URL to Linkwarden with newsletter or LLM enrichment."""
 
-from ..api import create_link
+from ..links import create_link
 from ..collections_cache import get_collections
 from ..display import console, get_tag_color
 from ..llm import enrich_link

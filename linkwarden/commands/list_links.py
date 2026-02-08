@@ -6,7 +6,7 @@ import shutil
 from rich.markup import escape
 from rich.text import Text
 
-from ..api import fetch_collection_links, fetch_all_links
+from ..links import fetch_all_links, fetch_collection_links
 from ..collections_cache import get_collections
 from ..config import get_api_config
 from ..display import console, get_tag_color

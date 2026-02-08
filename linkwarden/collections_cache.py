@@ -42,14 +42,3 @@ def get_collections() -> List[Dict[str, Any]]:
 def clear_collections_cache() -> None:
     """Clear the collections cache."""
     clear_cache_type(CACHE_TYPE)
-
-
-# Legacy functions for backward compatibility
-def get_cached_collections() -> List[Dict[str, Any]] | None:
-    """Legacy function. Use get_collections() instead."""
-    return get_cache(CACHE_KEY, CACHE_TYPE, max_age_days=CACHE_DURATION_DAYS)
-
-
-def set_cached_collections(collections: List[Dict[str, Any]]) -> None:
-    """Legacy function. Use get_collections() instead."""
-    set_cache(CACHE_KEY, collections, CACHE_TYPE, ttl_days=CACHE_DURATION_DAYS)

@@ -2,7 +2,7 @@
 
 import html
 
-from ..api import fetch_collection_links, fetch_all_links, update_link
+from ..links import fetch_collection_links, fetch_all_links, update_link
 from ..collections_cache import get_collections
 from ..config import get_api_config
 from ..url_utils import normalize_url, get_url_path_key
