@@ -286,7 +286,7 @@ def call_chat_completions_api(client: OpenAI, model: str, user_prompt: str, syst
     return response.choices[0].message.content
 
 
-def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3, verbose: bool = False) -> dict | None:
+def enrich_link(url: str, prompt_path: str | None = None, verbose: bool = False) -> dict | None:
     """Call LLM to enrich a link with title, description, and tags.
 
     Uses OpenAI-compatible API. Configure via environment variables:
@@ -298,7 +298,6 @@ def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3, 
     Args:
         url: The URL to enrich
         prompt_path: Path to the prompt template file
-        max_retries: Maximum number of retries on API errors
         verbose: If True, show detailed LLM request information
 
     Returns:
