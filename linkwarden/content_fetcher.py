@@ -8,11 +8,12 @@ Uses trafilatura for articles and yt-dlp for videos.
 from typing import Optional, Dict, Any, Tuple, List
 from urllib.parse import urlparse
 import json
-import re
 import html
+from io import StringIO
 import time
 
 import trafilatura
+import webvtt
 import yt_dlp
 import requests
 
@@ -209,8 +210,8 @@ def parse_vtt_content(vtt_text: str) -> Optional[str]:
     """
     Parse WebVTT subtitle format to extract clean text.
 
-    Removes headers, timestamps, cue identifiers, and styling tags.
-    Decodes HTML entities and merges lines into continuous text.
+    Uses webvtt-py to handle header removal, timestamp stripping,
+    cue ID removal, and HTML tag cleaning.
 
     Args:
         vtt_text: Raw VTT subtitle content
@@ -219,48 +220,13 @@ def parse_vtt_content(vtt_text: str) -> Optional[str]:
         Clean transcript text or None on failure
     """
     try:
-        lines = vtt_text.split('\n')
-        text_lines = []
-
-        for line in lines:
-            line = line.strip()
-
-            # Skip empty lines
-            if not line:
-                continue
-
-            # Skip headers (WEBVTT, Kind:, Language:)
-            if line.startswith('WEBVTT') or line.startswith('Kind:') or line.startswith('Language:'):
-                continue
-
-            # Skip timestamp lines (contains -->)
-            if '-->' in line:
-                continue
-
-            # Skip numeric cue identifiers (just numbers)
-            if line.isdigit():
-                continue
-
-            # Remove VTT tags like <c>, <v>, </c>, etc.
-            line = re.sub(r'<[^>]+>', '', line)
-
-            # Decode HTML entities
-            line = html.unescape(line)
-
-            # Add to text lines
-            if line:
-                text_lines.append(line)
-
+        captions = webvtt.from_buffer(StringIO(vtt_text))
+        text_lines = [caption.text for caption in captions if caption.text.strip()]
         if not text_lines:
             return None
-
-        # Join with spaces
         raw_text = ' '.join(text_lines)
-
-        # Deduplicate consecutive repetitions
         return _deduplicate_transcript_text(raw_text)
-
-    except (ValueError, AttributeError):
+    except Exception:
         return None
 
 

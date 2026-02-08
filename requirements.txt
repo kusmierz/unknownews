@@ -5,3 +5,4 @@ rich
 openai
 trafilatura
 yt-dlp[default,curl-cffi]
+webvtt-py
