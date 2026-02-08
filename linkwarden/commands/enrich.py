@@ -9,7 +9,6 @@ from ..config import get_api_config
 from ..content_fetcher import RateLimitError
 from ..display import console, get_tag_color
 from ..llm import enrich_link
-from ..llm_cache import get_cached, set_cached, remove_cached
 from ..tag_utils import has_real_tags, get_system_tags
 
 
@@ -145,23 +144,16 @@ def enrich_links(
         )
         console.print(f"  [dim][link={link_url}]{link_url}[/link][/dim]")
 
-        # Check cache first
-        result = get_cached(link_url)
-        if result:
-            console.print("  [dim](cached)[/dim]")
-        else:
-            # Fetch content and call LLM
-            try:
-                with console.status("  Enriching...", spinner="dots"):
-                    result = enrich_link(link_url, prompt_path, verbose=verbose)
-                if result and not result.get("_skipped"):
-                    set_cached(link_url, result)
-            except RateLimitError as e:
-                console.print(f"\n[red]✗ Rate limit exceeded[/red]")
-                console.print(f"[yellow]  {e}[/yellow]")
-                console.print("[yellow]  Please wait before retrying or reduce request rate[/yellow]")
-                console.print(f"\n[dim]Stopped after processing {processed} links[/dim]")
-                raise SystemExit(1)  # Exit with error code
+        # Fetch content and call LLM
+        try:
+            with console.status("  Enriching...", spinner="dots"):
+                result = enrich_link(link_url, prompt_path, verbose=verbose)
+        except RateLimitError as e:
+            console.print(f"\n[red]✗ Rate limit exceeded[/red]")
+            console.print(f"[yellow]  {e}[/yellow]")
+            console.print("[yellow]  Please wait before retrying or reduce request rate[/yellow]")
+            console.print(f"\n[dim]Stopped after processing {processed} links[/dim]")
+            raise SystemExit(1)  # Exit with error code
 
         if not result:
             console.print("  [red]Failed to enrich[/red]")

@@ -42,9 +42,9 @@ Krok 3: Klasyfikacja (tagi + kategoria) na podstawie Kroku 1.
 - Nie powtarzaj informacji z tytułu (np. nie powtarzaj czasu trwania). Nie pisz oczywistości typu "to film o…" jeśli nic to nie wnosi.
 
 ## Tagi (pole "tags")
-- Lista 2–6 słów kluczowych w języku polskim: rzeczowniki lub krótkie, proste frazy, możliwe do wielokrotnego użycia w archiwum.
+- Lista 2–6 słów kluczowych w języku angielskim: rzeczowniki lub krótkie, proste frazy, możliwe do wielokrotnego użycia w archiwum.
 - Używaj małych liter, bez odmiany (w miarę możliwości).
-- Unikaj tagów zbyt ogólnych i tagów jednorazowych/opisowych/emocjonalnych (np. "ciekawostki", "przemyślenia", "fajne").
+- Unikaj tagów zbyt ogólnych i tagów jednorazowych/opisowych/emocjonalnych (np. "curiosities", "thoughts", "cool").
 - Nie powtarzaj synonimów ani tagów bardzo bliskich znaczeniowo (uogólnij do 1–2 zamiast tego).
 - Nie powtarzaj tagu będącego nazwą kategorii (np. "ai" przy kategorii AI, "devops" przy Tech / Devops).
 
@@ -94,7 +94,7 @@ Dla URL: https://writethatblog.substack.com/p/technical-blogging-lessons-learned
 {
   "title": "Czego nauczyli się najlepsi twórcy technicznych blogów? - wnioski z kilkunastu wywiadów",
   "description": "Autor zebrał w jednym miejscu najważniejsze lekcje od kilkunastu znanych blogerów technicznych - od rad dotyczących nawyku pisania, po podejście do kwestii motywacji i kreatywności w pisaniu. Sporo tu przemyśleń o tym, jak znaleźć własny styl i format (wizualizacje, interaktywność, dostępność), jak nie dać się zdominować liczbom, SEO i zbytecznym szerokim tematom, a także jak mądrze podchodzić do feedbacku i krytyki od czytelników. Jeżeli prowadzisz bloga albo publikujesz swoje teksty w jakiejkolwiek innej formie, myślę, że warto zapoznać się z tym tekstem.",
-  "tags": ["porady", "blog"],
+  "tags": ["blogging", "writing"],
   "category": "Software Development",
   "suggested_category": null
 }
@@ -105,7 +105,7 @@ Dla URL: https://restofworld.org/2025/ai-chatbot-china-sick/
 {
   "title": "Mama, chatbot i chiński system ochrony zdrowia",
   "description": "Mało techniczny, ale ciekawy artykuł o tym, jak chatboty napędzane przez DeepSeek wypełniają lukę w trudno dostępnej i przeciążonej opiece zdrowotnej w Chinach. Dla wielu ludzi stają się podstawowym źródłem informacji medycznych, a dla osób starszych także emocjonalnym wsparciem w sytuacjach, gdy nie mogą one liczyć na rodzinę. Warty przemyślenia tekst o zastosowaniu modeli językowych w medycynie i realnych ryzykach, jakie to tworzy - począwszy od halucynacji, przez błędne zalecenia, aż po całkowite uzależnienie pacjentów od 'wirtualnych lekarzy'.",
-  "tags": ["chatbot", "deepseek", "chiny", "opieka zdrowotna", "medycyna"],
+  "tags": ["chatbot", "deepseek", "healthcare", "china"],
   "category": "AI",
   "suggested_category": null
 }
@@ -116,7 +116,7 @@ Dla URL: https://philna.sh/blog/2026/01/11/javascript-date-calculation/
 {
   "title": "Jak bardzo może się wykrzaczyć obliczanie daty w JavaScript? - bardzo ;)",
   "description": "Autor opisuje pozornie prosty fragment kodu z obliczaniem końca miesiąca, który na zachodnim wybrzeżu USA wygenerował kompletnie absurdalną datę. Jak się domyślasz, chodziło o obsługę stref czasowych. Z tekstu dowiesz się, dlaczego operacje typu setMonth na obiekcie Date potrafią niespodziewanie przepełniać miesiące i co z tym możesz zrobić. W artykule znajdziesz też podpowiedzi, czego używać zamiast tradycyjnego obiektu Date i co robić, gdy ta bardziej nowoczesna metoda nie jest jeszcze u Ciebie dostępna.",
-  "tags": ["javascript", "daty", "strefa czasowa"],
+  "tags": ["javascript", "date", "timezone"],
   "category": "Software Development",
   "suggested_category": null
 }

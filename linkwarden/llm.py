@@ -13,6 +13,7 @@ from openai.types.shared_params import ResponseFormatJSONObject
 
 from .display import console
 from .content_fetcher import fetch_content, RateLimitError
+from . import llm_cache
 
 DEFAULT_MODEL = "gpt-4o-mini"
 PROMPT_PATH = "prompts/enrich-link.md"
@@ -304,6 +305,13 @@ def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3, 
         Dict with keys: title, description, tags (list), category, suggested_category
         Returns None on failure
     """
+    # Check cache first
+    cached_result = llm_cache.get_cached(url)
+    if cached_result is not None:
+        if verbose:
+            console.print("[dim]✓ Using cached LLM result[/dim]")
+        return cached_result
+
     if not prompt_path:
       prompt_path = PROMPT_PATH
 
@@ -346,6 +354,8 @@ def enrich_link(url: str, prompt_path: str | None = None, max_retries: int = 3, 
             num_tags = len(result.get("tags", []))
             cat = result.get("category", "")
             console.print(f"[dim]  Parsed: title({title_len} chars), desc({desc_len} chars), {num_tags} tags, category={cat}[/dim]")
+        # Cache the result
+        llm_cache.set_cached(url, result)
         return result
     console.print("[yellow]Failed to parse LLM response[/yellow]")
 
