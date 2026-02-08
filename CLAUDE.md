@@ -110,17 +110,20 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
   - Exceptions: `ContentFetchError`, `RateLimitError`
 - `content_fetcher.py` - Content fetching orchestrator (re-exports `RateLimitError` for backward compat)
   - `fetch_content(url)` - orchestrates content fetching based on URL type
+  - `format_content_for_llm(content_data)` - formats fetch_content() output as XML for LLM
 - `article_fetcher.py` - Article content fetching
   - `fetch_article_content(url)` - uses trafilatura to extract article content
 - `video_fetcher.py` - Video content fetching
   - `fetch_video_content(url)` - uses yt-dlp for metadata + youtube-transcript-api for transcripts (cached 7 days)
   - `extract_transcript_from_info(info_dict)` - extracts transcript via youtube-transcript-api (languages: original → en → pl)
   - **Optimization**: Caches only essential data + transcript (~10 KB per video)
-- `llm.py` - LLM API client (OpenAI-compatible)
-  - `enrich_link(url, prompt_path)` - calls LLM to generate title, description, tags
-  - `format_content_for_llm(content_data)` - formats content with chapters (videos) or article text for LLM
+- `llm.py` - Generic OpenAI-compatible API client
+  - `call_api(user_prompt, system_prompt, max_retries, verbose)` - orchestrator with retry + verbose display
   - `call_responses_api(...)` - OpenAI Responses API with web search
   - `call_chat_completions_api(...)` - standard Chat Completions API
+- `enrich_llm.py` - Enrichment-specific LLM orchestration
+  - `enrich_link(url, prompt_path, verbose)` - cache check → fetch content → format → call LLM → parse → cache save
+  - `load_prompt(prompt_path)` - loads prompt template file
   - `parse_json_response(text)` - parses JSON from LLM response, decodes HTML entities
 - `llm_cache.py` - Thin wrapper around unified cache for LLM results (no expiry)
   - `get_cached(url)` / `set_cached(url, result)` / `remove_cached(url)`

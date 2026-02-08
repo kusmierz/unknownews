@@ -1,64 +1,14 @@
 """Enrich links command - uses LLM to generate titles, descriptions, and tags."""
 
 import html
-from urllib.parse import urlparse
 
 from ..links import fetch_collection_links, fetch_all_links, update_link
 from ..collections_cache import get_collections
 from ..config import get_api_config
 from ..content_fetcher import RateLimitError
 from ..display import console, get_tag_color
-from ..enrich_llm import enrich_link
-from ..tag_utils import has_real_tags, get_system_tags
-
-
-def is_title_empty(name: str, url: str) -> bool:
-    """Check if a link title is considered empty.
-
-    Empty means: empty string, or equals the URL domain.
-    """
-    if not name or not name.strip():
-        return True
-
-    # Check if name is just the domain
-    try:
-        parsed = urlparse(url)
-        domain = parsed.netloc
-        # Remove www. prefix for comparison
-        if domain.startswith("www."):
-            domain = domain[4:]
-        name_lower = name.strip().lower()
-        if name_lower == domain.lower() or name_lower == f"www.{domain.lower()}":
-            return True
-    except Exception:
-        pass
-
-    return False
-
-
-def is_description_empty(description: str) -> bool:
-    """Check if a description is considered empty."""
-    return not description or not description.strip()
-
-
-def needs_enrichment(link: dict, force: bool = False) -> dict:
-    """Determine what fields need enrichment for a link.
-
-    Returns dict with keys: title, description, tags (bool values)
-    """
-    if force:
-        return {"title": True, "description": True, "tags": True}
-
-    url = link.get("url", "")
-    name = link.get("name", "")
-    description = link.get("description", "")
-    tags = link.get("tags", [])
-
-    return {
-        "title": is_title_empty(name, url),
-        "description": is_description_empty(description),
-        "tags": not has_real_tags(tags),
-    }
+from ..enrich_llm import enrich_link, needs_enrichment
+from ..tag_utils import get_system_tags
 
 
 def enrich_links(

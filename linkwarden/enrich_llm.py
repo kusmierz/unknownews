@@ -4,11 +4,13 @@ import html
 import json
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .llm import call_api
 from .content_fetcher import fetch_content, format_content_for_llm, RateLimitError
 from . import llm_cache
 from .display import console
+from .tag_utils import has_real_tags
 
 PROMPT_PATH = "prompts/enrich-link.md"
 
@@ -57,6 +59,55 @@ def parse_json_response(response_text: str) -> dict | None:
     except json.JSONDecodeError as e:
         console.print(f"[yellow]JSON parse error: {e}[/yellow]")
         return None
+
+
+def is_title_empty(name: str, url: str) -> bool:
+    """Check if a link title is considered empty.
+
+    Empty means: empty string, or equals the URL domain.
+    """
+    if not name or not name.strip():
+        return True
+
+    # Check if name is just the domain
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc
+        # Remove www. prefix for comparison
+        if domain.startswith("www."):
+            domain = domain[4:]
+        name_lower = name.strip().lower()
+        if name_lower == domain.lower() or name_lower == f"www.{domain.lower()}":
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+def is_description_empty(description: str) -> bool:
+    """Check if a description is considered empty."""
+    return not description or not description.strip()
+
+
+def needs_enrichment(link: dict, force: bool = False) -> dict:
+    """Determine what fields need enrichment for a link.
+
+    Returns dict with keys: title, description, tags (bool values)
+    """
+    if force:
+        return {"title": True, "description": True, "tags": True}
+
+    url = link.get("url", "")
+    name = link.get("name", "")
+    description = link.get("description", "")
+    tags = link.get("tags", [])
+
+    return {
+        "title": is_title_empty(name, url),
+        "description": is_description_empty(description),
+        "tags": not has_real_tags(tags),
+    }
 
 
 def enrich_link(url: str, prompt_path: str | None = None, verbose: bool = False) -> dict | None:
