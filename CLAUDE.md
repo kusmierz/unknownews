@@ -103,17 +103,19 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
   - `get_tag_color(tag_name)` - consistent tag colors
 - `duplicates.py` - Duplicate detection
   - `find_duplicates(links)` -> `(exact_groups, fuzzy_groups)`
-- `content_fetcher.py` - Content fetching for articles and videos
+- `fetcher_utils.py` - Shared utilities and exceptions for content fetchers
+  - `truncate_content(text, max_chars)` - intelligent sentence-boundary truncation
+  - `format_duration(seconds)` - converts seconds to human-readable duration
+  - `is_video_url(url)` - URL-based video platform detection
+  - Exceptions: `ContentFetchError`, `RateLimitError`
+- `content_fetcher.py` - Content fetching orchestrator (re-exports `RateLimitError` for backward compat)
   - `fetch_content(url)` - orchestrates content fetching based on URL type
+- `article_fetcher.py` - Article content fetching
   - `fetch_article_content(url)` - uses trafilatura to extract article content
+- `video_fetcher.py` - Video content fetching
   - `fetch_video_content(url)` - uses yt-dlp for metadata + youtube-transcript-api for transcripts (cached 7 days)
   - `extract_transcript_from_info(info_dict)` - extracts transcript via youtube-transcript-api (languages: original → en → pl)
-  - Exceptions: `RateLimitError` (YouTube request blocked / IP blocked)
   - **Optimization**: Caches only essential data + transcript (~10 KB per video)
-    - Excludes heavy unused data: formats, thumbnails, heatmap, subtitles
-    - Preserves: metadata, chapters, stats, categories, extracted transcript
-    - Caches extracted transcript to avoid re-fetching on every run
-    - Handles rate limits gracefully (continues without transcript instead of crashing)
 - `llm.py` - LLM API client (OpenAI-compatible)
   - `enrich_link(url, prompt_path)` - calls LLM to generate title, description, tags
   - `format_content_for_llm(content_data)` - formats content with chapters (videos) or article text for LLM
