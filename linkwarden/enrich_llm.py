@@ -79,6 +79,8 @@ def is_title_empty(name: str, url: str) -> bool:
         name_lower = name.strip().lower()
         if name_lower == domain.lower() or name_lower == f"www.{domain.lower()}":
             return True
+        if name_lower == "untitled":
+          return True
     except Exception:
         pass
 

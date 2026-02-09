@@ -50,11 +50,6 @@ def _prepare_newsletter(link, nl_data):
     changes = {
         "tags_to_add": tags_to_add,
         "all_system_tags": tags_to_add,
-        # Store originals for display (link may be mutated in-memory before display)
-        "original_name": link_name,
-        "original_url": link_url,
-        "original_description": existing_desc,
-        "original_tags": existing_tags,
     }
 
     if name_needs_update:
@@ -107,21 +102,18 @@ def _prepare_llm(link, needs, prompt_path, verbose):
     return changes
 
 
-def _display_link_changes(link, nl_changes, llm_changes, dry_run, verbose, match_type=None):
-    """Display one unified block for all changes to a link."""
+def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose, match_type=None):
+    """Display one unified block for all changes to a link.
+
+    Shows diffs between original `link` and `final` (what will be saved),
+    attributed to their source (newsletter / llm).
+    """
     link_id = link.get("id")
 
-    # Use originals from nl_changes if available (link may have been mutated in-memory)
-    if nl_changes:
-        link_name = html.unescape(nl_changes["original_name"])
-        link_url = nl_changes["original_url"]
-        existing_desc = nl_changes["original_description"]
-        existing_tags = nl_changes["original_tags"]
-    else:
-        link_name = html.unescape(link.get("name", "") or "Untitled")
-        link_url = link.get("url", "")
-        existing_desc = link.get("description", "") or ""
-        existing_tags = {tag.get("name", "") for tag in link.get("tags", [])}
+    link_name = html.unescape(link.get("name", "") or "Untitled")
+    link_url = link.get("url", "")
+    existing_desc = link.get("description", "") or ""
+    existing_tags = {tag.get("name", "") for tag in link.get("tags", [])}
 
     dry_label = "[dim](dry-run)[/dim] " if dry_run else ""
     fuzzy_label = " [cyan]~[/cyan]" if match_type == "fuzzy" else ""
@@ -129,18 +121,17 @@ def _display_link_changes(link, nl_changes, llm_changes, dry_run, verbose, match
     # Header
     console.print(f"{dry_label}#{link_id}{fuzzy_label}  [bold]{link_name}[/bold]")
 
-    # URL line (show normalized if newsletter changes it, otherwise show original)
-    display_url = nl_changes.get("url", link_url) if nl_changes else link_url
-    console.print(f"  [dim][link={display_url}]{display_url}[/link][/dim]")
+    # URL line
+    console.print(f"  [dim][link={final['url']}]{final['url']}[/link][/dim]")
 
     # Newsletter section
     if nl_changes:
         console.print(f"  [blue]newsletter:[/blue]")
 
         if "name" in nl_changes:
-            show_diff(link_name, html.unescape(nl_changes["name"]), indent="    ")
+            show_diff(link_name, html.unescape(final["name"]), indent="    ")
         if "url" in nl_changes and verbose:
-            show_diff(link_url, nl_changes["url"], indent="    ", muted=True)
+            show_diff(link_url, final["url"], indent="    ", muted=True)
         if nl_changes.get("new_tags"):
             console.print(f"    [green]+ tags: {', '.join(nl_changes['new_tags'])}[/green]")
         # Show existing extra tags (not the system ones we're adding)
@@ -150,18 +141,18 @@ def _display_link_changes(link, nl_changes, llm_changes, dry_run, verbose, match
             console.print(f"    [dim]  tags: {', '.join(sorted(extra_tags))}[/dim]")
         if "description" in nl_changes:
             if existing_desc:
-                show_diff(html.unescape(existing_desc), html.unescape(nl_changes["description"]), indent="    ")
+                show_diff(html.unescape(existing_desc), html.unescape(final["description"]), indent="    ")
             else:
-                console.print(f"    [green]+ desc: {html.unescape(nl_changes['description'])}[/green]")
+                console.print(f"    [green]+ desc: {html.unescape(final['description'])}[/green]")
 
     # LLM section
     if llm_changes and isinstance(llm_changes, dict):
         console.print(f"  [magenta]llm:[/magenta]")
 
         if "name" in llm_changes:
-            console.print(f"    [green]+ title:[/green] {llm_changes['name']}")
+            show_diff(link_name, final["name"], indent="    ")
         if "description" in llm_changes:
-            console.print(f"    [green]+ desc:[/green] {llm_changes['description']}")
+            show_diff(existing_desc or "(empty)", final["description"], indent="    ")
         if llm_changes.get("tags"):
             tags_display = ", ".join(
                 f"[{get_tag_color(t)}]{t}[/{get_tag_color(t)}]" for t in llm_changes["tags"]
@@ -174,8 +165,7 @@ def _display_link_changes(link, nl_changes, llm_changes, dry_run, verbose, match
             console.print(f"    [dim]category: {cat_str}[/dim]")
 
         # Show preserved system tags (only in LLM section)
-        current_tags = link.get("tags", [])
-        system_tags = get_system_tags(current_tags)
+        system_tags = get_system_tags(link.get("tags", []))
         if system_tags and not nl_changes:
             preserved = ", ".join(t.get("name", "") for t in system_tags)
             console.print(f"    [dim]preserved: {preserved}[/dim]")
@@ -189,15 +179,15 @@ def _display_link_changes(link, nl_changes, llm_changes, dry_run, verbose, match
     print("")
 
 
-def _apply_changes(link, nl_changes, llm_changes, dry_run, verbose):
-    """Merge newsletter + LLM changes and call update_link() once."""
-    link_name = link.get("name", "Untitled")
-    link_url = link.get("url", "")
-    existing_desc = link.get("description", "") or ""
+def _build_final_values(link, nl_changes, llm_changes):
+    """Compute merged final state from newsletter + LLM changes.
 
-    # Start with current values
-    final_name = link_name
-    final_url = link_url
+    Newsletter takes priority, LLM fills gaps.
+    Returns dict with name, url, description, tags.
+    """
+    final_name = link.get("name", "Untitled")
+    final_url = link.get("url", "")
+    existing_desc = link.get("description", "") or ""
     final_description = existing_desc
     final_tags = []
 
@@ -220,30 +210,43 @@ def _apply_changes(link, nl_changes, llm_changes, dry_run, verbose):
             final_description = llm_changes["description"]
         final_tags.extend(llm_changes.get("tags", []))
 
+    return {
+        "name": final_name,
+        "url": final_url,
+        "description": final_description,
+        "tags": final_tags,
+    }
+
+
+def _link_with_newsletter(link, nl_changes):
+    """Return a new dict representing the link after newsletter changes (without mutating original)."""
+    updated = dict(link)
+    if "name" in nl_changes:
+        updated["name"] = nl_changes["name"]
+    if "description" in nl_changes:
+        existing_desc = link.get("description", "") or ""
+        nl_desc = nl_changes["description"]
+        updated["description"] = f"{nl_desc}\n\n---\n{existing_desc}" if existing_desc else nl_desc
+    # Add newsletter tags
+    existing_tag_names = {tag.get("name", "") for tag in link.get("tags", [])}
+    new_tags = list(link.get("tags", []))
+    for t in nl_changes.get("tags_to_add", []):
+        if t not in existing_tag_names:
+            new_tags.append({"name": t})
+    updated["tags"] = new_tags
+    return updated
+
+
+def _apply_changes(link, final, dry_run, verbose):
+    """Apply pre-computed final values via update_link()."""
     try:
-        update_link(link, final_name, final_url, final_description, final_tags, dry_run=dry_run)
+        update_link(link, final["name"], final["url"], final["description"], final["tags"], dry_run=dry_run)
         if verbose and not dry_run:
             console.print(f"  [dim]Updated link #{link.get('id')} successfully[/dim]")
         return True
     except Exception as e:
         console.print(f"  [red]! Update failed: {e}[/red]")
         return False
-
-
-def _update_link_in_memory(link, nl_changes):
-    """Update in-memory link after newsletter changes, so LLM needs_enrichment check is accurate."""
-    if not nl_changes:
-        return
-    if "name" in nl_changes:
-        link["name"] = nl_changes["name"]
-    if "description" in nl_changes:
-        existing_desc = link.get("description", "") or ""
-        nl_desc = nl_changes["description"]
-        link["description"] = f"{nl_desc}\n\n---\n{existing_desc}" if existing_desc else nl_desc
-    for t in nl_changes.get("tags_to_add", []):
-        existing_tag_names = {tag.get("name", "") for tag in link.get("tags", [])}
-        if t not in existing_tag_names:
-            link.setdefault("tags", []).append({"name": t})
 
 
 def enrich_links(
@@ -331,14 +334,13 @@ def enrich_links(
             nl_data, match_type = match_newsletter(link, newsletter_index, newsletter_fuzzy_index)
             if nl_data:
                 nl_changes = _prepare_newsletter(link, nl_data)
-                if nl_changes and use_llm:
-                    _update_link_in_memory(link, nl_changes)
             else:
                 unmatched_urls.append(link.get("url", ""))
 
-        # LLM pass
+        # LLM pass — use post-newsletter view for needs check (without mutating link)
         if use_llm:
-            needs = needs_enrichment(link, force=force)
+            link_for_llm = _link_with_newsletter(link, nl_changes) if nl_changes and use_newsletter else link
+            needs = needs_enrichment(link_for_llm, force=force)
             if any(needs.values()):
                 llm_changes = _prepare_llm(link, needs, prompt_path, verbose)
                 if llm_changes == "rate_limited":
@@ -351,14 +353,12 @@ def enrich_links(
         llm_failed = llm_changes == "failed"
 
         if has_nl or has_llm:
+            final = _build_final_values(link, nl_changes if has_nl else None, llm_changes if has_llm else None)
             _display_link_changes(
-                link, nl_changes, llm_changes if has_llm else None,
+                link, final, nl_changes if has_nl else None, llm_changes if has_llm else None,
                 dry_run, verbose, match_type=match_type,
             )
-            success = _apply_changes(
-                link, nl_changes, llm_changes if has_llm else None,
-                dry_run, verbose,
-            )
+            success = _apply_changes(link, final, dry_run, verbose)
             if success:
                 if has_nl:
                     nl_updated += 1
