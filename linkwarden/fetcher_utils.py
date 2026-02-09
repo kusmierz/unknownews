@@ -2,6 +2,7 @@
 Shared utilities and exceptions for content fetchers.
 """
 
+import math
 from typing import Tuple
 from urllib.parse import urlparse
 
@@ -84,6 +85,28 @@ def format_duration(seconds: int) -> str:
         parts.append(f"{remaining_seconds}s")
 
     return " ".join(parts)
+
+
+def format_duration_short(seconds: int) -> str:
+    """Convert seconds to short rounded duration for titles.
+
+    Examples: "54m" (was 53m33s), "~2.5h" (was 2h25m45s), "2h" (exact)
+    """
+    if seconds < 60:
+        return f"{seconds}s"
+
+    total_minutes = seconds / 60
+
+    if total_minutes < 60:
+        return f"{math.ceil(total_minutes)}m"
+
+    # Round to nearest 0.5h
+    total_hours = total_minutes / 60
+    rounded = round(total_hours * 2) / 2
+
+    if rounded == int(rounded):
+        return f"{int(rounded)}h"
+    return f"~{rounded:.1f}h"
 
 
 def is_video_url(url: str) -> bool:

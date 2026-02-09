@@ -49,9 +49,10 @@ def list_links(collection_id: int | None = None, verbose: int = 0) -> None:
         by_collection[link.get("_collection_name", "Unknown")].append(link)
 
     # Calculate widths
+    terminal_margin = 12
     terminal_width = shutil.get_terminal_size().columns or 120
-    name_max = min(70, terminal_width - 25)
-    desc_max = terminal_width - 12
+    name_max = min(127, terminal_width - 2 * terminal_margin)
+    desc_max = terminal_width - terminal_margin
 
     # Display links
     for coll_name, coll_links in sorted(by_collection.items()):
@@ -79,9 +80,16 @@ def list_links(collection_id: int | None = None, verbose: int = 0) -> None:
             line.append(f"  #{link_id:<5} ", style="dim")
             line.append(name, style=f"link {link_url}")
             if tags:
-                line.append("  ")
+                tag_lines = Text()
                 for tag in tags:
-                    line.append(f"[{tag}] ", style=f"dim {get_tag_color(tag)}")
+                    tag_lines.append(f"[{tag}] ", style=f"dim {get_tag_color(tag)}")
+
+                if terminal_width - terminal_margin < len(name) + len(tag_lines):
+                  line.append("\n            ")
+                else:
+                  line.append("  ")
+
+                line.append(tag_lines)
             console.print(line)
 
             if verbose:

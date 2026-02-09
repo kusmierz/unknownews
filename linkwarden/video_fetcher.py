@@ -12,7 +12,7 @@ from youtube_transcript_api._errors import (
 )
 from youtube_transcript_api.formatters import TextFormatter
 
-from .fetcher_utils import truncate_content, format_duration, RateLimitError
+from .fetcher_utils import truncate_content, format_duration, format_duration_short, RateLimitError
 from .display import console
 from . import yt_dlp_cache
 
@@ -208,8 +208,10 @@ def fetch_video_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
 
         duration = info.get('duration')
         duration_string = None
+        duration_string_short = None
         if duration:
             duration_string = format_duration(duration)
+            duration_string_short = format_duration_short(duration)
 
         description = info.get('description', '')
         # Video descriptions are usually short, no truncation needed
@@ -223,6 +225,7 @@ def fetch_video_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
             "metadata": {
                 "duration": duration,
                 "duration_string": duration_string,
+                "duration_string_short": duration_string_short,
                 "uploader": info.get('uploader') or info.get('channel'),
                 "upload_date": info.get('upload_date'),
             }

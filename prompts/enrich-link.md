@@ -29,7 +29,12 @@ Krok 3: Klasyfikacja (tagi + kategoria) na podstawie Kroku 1.
 ## Tytuł (pole "title")
 - Twórz chwytliwy tytuł w języku polskim, złożony z jednego lub dwóch członów oddzielonych myślnikiem. Często używaj pytań lub zaskakujących stwierdzeń, które zachęcą do kliknięcia ("Dlaczego…?", "Czy…?", "Jak…?").
 - Zamiast dosłownie tłumaczyć oryginalny tytuł, parafrazuj go tak, aby oddawał główny sens i brzmiał naturalnie po polsku.
-- Jeśli materiał to film, podcast lub prezentacja i czas trwania jest dostępny (w znaczniku `<duration>` lub jawnie w treści), dodaj w nawiasie rodzaj i czas trwania, np. "(film, 21 m)", "(podcast, 58 min)". Jeśli czasu nie ma — nie zgaduj i nie dodawaj.
+- Jeśli materiał to film, podcast lub prezentacja i czas trwania jest dostępny (w znaczniku `<duration>`), dodaj w nawiasie rodzaj i czas trwania w tytule, np. "(film, 54m)", "(podcast, ~1.5h)".
+
+WAŻNE:
+- Czas trwania dodaj TYLKO w tytule, NIE w opisie
+- Użyj dokładnie formatu z tagu <duration> (np. "54m", "~1.5h", "2h")
+- Jeśli czasu nie ma — nie zgaduj i nie dodawaj
 
 ## Opis (pole "description")
 - Napisz 2–4 zdania. Styl: jak w UnknowNews, zwięźle, konkretnie, zachęcająco.

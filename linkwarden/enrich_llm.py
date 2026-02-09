@@ -87,6 +87,11 @@ def is_title_empty(name: str, url: str) -> bool:
     return False
 
 
+def has_llm_title(name: str) -> bool:
+    """Check if title already has LLM bracket format 'LLM title [Original]'."""
+    return bool(name and name.rstrip().endswith("]") and " [" in name)
+
+
 def is_description_empty(description: str) -> bool:
     """Check if a description is considered empty."""
     return not description or not description.strip()
@@ -106,7 +111,7 @@ def needs_enrichment(link: dict, force: bool = False) -> dict:
     tags = link.get("tags", [])
 
     return {
-        "title": is_title_empty(name, url),
+        "title": is_title_empty(name, url) or not has_llm_title(name),
         "description": is_description_empty(description),
         "tags": not has_real_tags(tags),
     }
@@ -134,7 +139,7 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
     cached_result = llm_cache.get_cached(url)
     if cached_result is not None:
         if verbose >= 1:
-            console.print("[dim]✓ Using cached LLM result[/dim]")
+            console.print("  [dim]✓ Using cached LLM result[/dim]")
         return cached_result
 
     if not prompt_path:
@@ -159,7 +164,7 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
         return {"_skipped": True, "_reason": "Content fetch failed"}
 
     formatted_content = format_content_for_llm(content_data)
-    console.print(f"[dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
+    console.print(f"  [dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
 
     # Call API
     response_text = call_api(formatted_content, prompt_template, verbose=verbose)

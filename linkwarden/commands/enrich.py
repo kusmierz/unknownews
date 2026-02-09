@@ -70,6 +70,7 @@ def _prepare_llm(link, needs, prompt_path, verbose):
     Returns a dict of proposed changes, or a string ("failed"/"rate_limited") on error.
     """
     link_url = link.get("url", "")
+    link_name = link.get("name", "Untitled")
 
     try:
         with console.status("  Enriching...", spinner="dots"):
@@ -88,8 +89,20 @@ def _prepare_llm(link, needs, prompt_path, verbose):
         return "failed"
 
     changes = {}
+
+    # Normalize URL (strip tracking params, fragments)
+    link_url = link.get("url", "")
+    normalized_url = normalize_url(link_url)
+    if normalized_url and normalized_url != link_url:
+        changes["url"] = normalized_url
+
     if needs["title"] and result.get("title"):
-        changes["name"] = result["title"]
+        llm_title = result["title"]
+        # Apply bracket logic: "LLM title [Original title]"
+        if llm_title != link_name and link_name and link_name != "Untitled" and link_name != "Just a moment...":
+            changes["name"] = f"{llm_title} [{html.unescape(link_name)}]"
+        else:
+            changes["name"] = llm_title
     if needs["description"] and result.get("description"):
         changes["description"] = result["description"]
     if needs["tags"] and result.get("tags"):
@@ -102,7 +115,7 @@ def _prepare_llm(link, needs, prompt_path, verbose):
     return changes
 
 
-def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose, match_type=None):
+def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose, match_type=None, header_shown=False):
     """Display one unified block for all changes to a link.
 
     Shows diffs between original `link` and `final` (what will be saved),
@@ -118,11 +131,12 @@ def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose
     dry_label = "[dim](dry-run)[/dim] " if dry_run else ""
     fuzzy_label = " [cyan]~[/cyan]" if match_type == "fuzzy" else ""
 
-    # Header
-    console.print(f"{dry_label}#{link_id}{fuzzy_label}  [bold]{link_name}[/bold]")
+    if not header_shown:
+        # Header
+        console.print(f"{dry_label}#{link_id}{fuzzy_label}  [bold]{link_name}[/bold]")
 
-    # URL line
-    console.print(f"  [dim][link={final['url']}]{final['url']}[/link][/dim]")
+        # URL line
+        console.print(f"  [dim][link={final['url']}]{final['url']}[/link][/dim]")
 
     # Newsletter section
     if nl_changes:
@@ -130,7 +144,7 @@ def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose
 
         if "name" in nl_changes:
             show_diff(link_name, html.unescape(final["name"]), indent="    ")
-        if "url" in nl_changes and verbose:
+        if "url" in nl_changes:
             show_diff(link_url, final["url"], indent="    ", muted=True)
         if nl_changes.get("new_tags"):
             console.print(f"    [green]+ tags: {', '.join(nl_changes['new_tags'])}[/green]")
@@ -151,6 +165,8 @@ def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose
 
         if "name" in llm_changes:
             show_diff(link_name, final["name"], indent="    ")
+        if "url" in llm_changes and "url" not in (nl_changes or {}):
+            show_diff(link_url, final["url"], indent="    ", muted=True)
         if "description" in llm_changes:
             show_diff(existing_desc or "(empty)", final["description"], indent="    ")
         if llm_changes.get("tags"):
@@ -206,6 +222,8 @@ def _build_final_values(link, nl_changes, llm_changes):
     if llm_changes and isinstance(llm_changes, dict):
         if "name" in llm_changes and "name" not in (nl_changes or {}):
             final_name = llm_changes["name"]
+        if "url" in llm_changes and "url" not in (nl_changes or {}):
+            final_url = llm_changes["url"]
         if "description" in llm_changes and "description" not in (nl_changes or {}):
             final_description = llm_changes["description"]
         final_tags.extend(llm_changes.get("tags", []))
@@ -328,6 +346,7 @@ def enrich_links(
         nl_changes = None
         llm_changes = None
         match_type = None
+        header_shown = False
 
         # Newsletter pass
         if use_newsletter:
@@ -342,6 +361,12 @@ def enrich_links(
             link_for_llm = _link_with_newsletter(link, nl_changes) if nl_changes and use_newsletter else link
             needs = needs_enrichment(link_for_llm, force=force)
             if any(needs.values()):
+                # Show which link is being processed before the slow LLM call
+                _link_name = html.unescape(link.get("name", "") or "Untitled")
+                _link_url = link.get("url", "")
+                console.print(f"{dry_label}#{link.get('id')}  [bold]{_link_name}[/bold]")
+                console.print(f"  [dim][link={_link_url}]{_link_url}[/link][/dim]")
+                header_shown = True
                 llm_changes = _prepare_llm(link, needs, prompt_path, verbose)
                 if llm_changes == "rate_limited":
                     console.print(f"\n[dim]Stopped after processing {processed} links[/dim]")
@@ -356,7 +381,7 @@ def enrich_links(
             final = _build_final_values(link, nl_changes if has_nl else None, llm_changes if has_llm else None)
             _display_link_changes(
                 link, final, nl_changes if has_nl else None, llm_changes if has_llm else None,
-                dry_run, verbose, match_type=match_type,
+                dry_run, verbose, match_type=match_type, header_shown=header_shown,
             )
             success = _apply_changes(link, final, dry_run, verbose)
             if success:

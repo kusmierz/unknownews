@@ -125,8 +125,8 @@ def format_content_for_llm(content_data: dict) -> str:
         # Video metadata
         if metadata.get('uploader'):
             lines.append(f"<uploader>{metadata['uploader']}</uploader>")
-        if metadata.get('duration_string'):
-            lines.append(f"<duration>{metadata['duration_string']}</duration>")
+        if metadata.get('duration_string_short'):
+            lines.append(f"<duration>{metadata['duration_string_short']}</duration>")
         if metadata.get('upload_date'):
             lines.append(f"<upload_date>{metadata['upload_date']}</upload_date>")
 
