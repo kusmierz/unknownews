@@ -29,24 +29,20 @@ python linkwarden.py add <url> --silent           # no output, just exit code
 python linkwarden.py list                    # list all links grouped by collection
 python linkwarden.py list --collection 14   # list links from specific collection
 
-# Sync to Linkwarden
-python linkwarden.py sync --dry-run          # preview changes
-python linkwarden.py sync                    # sync all collections
-python linkwarden.py sync --collection 14    # specify collection
-python linkwarden.py sync --limit 5          # limit updates
-python linkwarden.py sync --show-unmatched   # show all unmatched URLs
+# Enrich links (newsletter data + LLM)
+python linkwarden.py enrich                       # newsletter match + LLM (default)
+python linkwarden.py enrich --newsletter-only     # newsletter data only (no LLM)
+python linkwarden.py enrich --llm-only            # LLM only (no newsletter matching)
+python linkwarden.py enrich --collection 14       # specific collection
+python linkwarden.py enrich --force               # overwrite all LLM fields
+python linkwarden.py enrich --dry-run             # preview without updating
+python linkwarden.py enrich --limit 5             # limit processed links
+python linkwarden.py enrich --show-unmatched      # show URLs not in newsletter
+python linkwarden.py enrich --verbose             # show detailed information
 
 # Remove duplicate links across all collections
 python linkwarden.py remove-duplicates --dry-run  # preview deletions
 python linkwarden.py remove-duplicates            # actually delete duplicates
-
-# Enrich links with LLM-generated titles, descriptions, and tags
-python linkwarden.py enrich --dry-run             # preview (caches LLM results)
-python linkwarden.py enrich                       # enrich empty fields only
-python linkwarden.py enrich --collection 14       # specific collection
-python linkwarden.py enrich --force               # regenerate all fields
-python linkwarden.py enrich --limit 5             # limit processed (including failures)
-python linkwarden.py enrich --verbose             # show detailed LLM request information
 ```
 
 ## Architecture
@@ -73,7 +69,7 @@ Caching:
 Entry point for Linkwarden tools. Parses command-line arguments and dispatches to command implementations.
 
 ### linkwarden/ (module)
-Modular Linkwarden tools for syncing newsletter descriptions and managing duplicates. Uses `rich` for colored output.
+Modular Linkwarden tools for enriching links and managing duplicates. Uses `rich` for colored output.
 
 **Core modules:**
 - `config.py` - Configuration utility
@@ -140,10 +136,8 @@ Modular Linkwarden tools for syncing newsletter descriptions and managing duplic
 **Commands** (in `linkwarden/commands/`) - all self-sustainable, read credentials from environment:
 - `add.py` - `add_link(url, collection_id, dry_run, unread, silent)` - adds URL with enrichment
 - `list_links.py` - `list_links(collection_id)` - lists all links grouped by collection
-- `sync.py` - `sync_links(jsonl_path, collection_id, dry_run, limit, show_unmatched)` - syncs descriptions
 - `remove_duplicates.py` - `remove_duplicates(dry_run)` - finds and removes duplicates
-- `enrich.py` - `enrich_links(prompt_path, collection_id, dry_run, force, limit)` - LLM enrichment
-- `enrich.py` - `enrich_links(base_url, token, prompt_path, collection_id, dry_run, force, limit)` - LLM enrichment
+- `enrich.py` - `enrich_links(...)` - newsletter + LLM enrichment (merged sync+enrich)
 
 ## Output structure
 

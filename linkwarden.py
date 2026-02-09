@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Linkwarden tools: sync newsletter descriptions, enrich links, and remove duplicates.
+Linkwarden tools: enrich links, manage duplicates, and more.
 
 Usage:
     # Add a URL to Linkwarden with enrichment
@@ -14,17 +14,15 @@ Usage:
     python linkwarden.py list                    # list all links
     python linkwarden.py list --collection 14   # list links from specific collection
 
-    # Sync newsletter descriptions to Linkwarden (all collections by default)
-    python linkwarden.py sync                    # sync all collections
-    python linkwarden.py sync --collection 14    # sync specific collection
-    python linkwarden.py sync --dry-run          # preview without updating
-
-    # Enrich links using LLM (generate titles, descriptions, tags)
-    python linkwarden.py enrich                    # enrich all links (empty fields only)
-    python linkwarden.py enrich --collection 14    # specific collection
-    python linkwarden.py enrich --force            # overwrite all fields
-    python linkwarden.py enrich --dry-run          # preview without updating
-    python linkwarden.py enrich --limit 5          # limit number of links
+    # Enrich links (newsletter data + LLM)
+    python linkwarden.py enrich                       # newsletter match + LLM (default)
+    python linkwarden.py enrich --newsletter-only     # newsletter data only
+    python linkwarden.py enrich --llm-only            # LLM only
+    python linkwarden.py enrich --collection 14       # specific collection
+    python linkwarden.py enrich --force               # overwrite all LLM fields
+    python linkwarden.py enrich --dry-run             # preview without updating
+    python linkwarden.py enrich --limit 5             # limit processed links
+    python linkwarden.py enrich --show-unmatched      # show URLs not in newsletter
 
     # Remove duplicates across all collections (keeps oldest link in each group)
     python linkwarden.py remove-duplicates --dry-run  # preview deletions
@@ -39,12 +37,12 @@ from dotenv import load_dotenv
 # Import from linkwarden modules
 from linkwarden.display import console
 from linkwarden.api import set_verbose
-from linkwarden.commands import add_link, enrich_links, list_links, remove_duplicates, sync_links
+from linkwarden.commands import add_link, enrich_links, list_links, remove_duplicates
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Linkwarden tools: sync newsletter descriptions and remove duplicates"
+        description="Linkwarden tools: enrich links, manage duplicates, and more"
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -82,36 +80,6 @@ def main():
         help="Show detailed LLM request information",
     )
 
-    # sync command (existing functionality)
-    sync_parser = subparsers.add_parser("sync", help="Sync newsletter descriptions to Linkwarden")
-    sync_parser.add_argument(
-        "--collection",
-        type=int,
-        default=None,
-        help="Linkwarden collection ID (default: all collections)",
-    )
-    sync_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview changes without updating Linkwarden",
-    )
-    sync_parser.add_argument(
-        "--limit",
-        type=int,
-        default=0,
-        help="Limit number of links to update (0 = no limit)",
-    )
-    sync_parser.add_argument(
-        "--show-unmatched",
-        action="store_true",
-        help="Show all unmatched Linkwarden URLs",
-    )
-    sync_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show detailed API and matching information",
-    )
-
     # list command
     list_parser = subparsers.add_parser("list", help="List all links grouped by collection")
     list_parser.add_argument(
@@ -140,7 +108,7 @@ def main():
     )
 
     # enrich command
-    enrich_parser = subparsers.add_parser("enrich", help="Enrich links using LLM (titles, descriptions, tags)")
+    enrich_parser = subparsers.add_parser("enrich", help="Enrich links (newsletter data + LLM)")
     enrich_parser.add_argument(
         "--collection",
         type=int,
@@ -155,7 +123,7 @@ def main():
     enrich_parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite all fields, not just empty ones",
+        help="Overwrite all LLM fields, not just empty ones",
     )
     enrich_parser.add_argument(
         "--limit",
@@ -164,9 +132,26 @@ def main():
         help="Limit number of links to process (0 = no limit)",
     )
     enrich_parser.add_argument(
+        "--show-unmatched",
+        action="store_true",
+        help="Show URLs not found in newsletter index",
+    )
+    enrich_parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Show detailed LLM request information",
+        help="Show detailed information",
+    )
+    # Mutually exclusive: --newsletter-only vs --llm-only
+    source_group = enrich_parser.add_mutually_exclusive_group()
+    source_group.add_argument(
+        "--newsletter-only",
+        action="store_true",
+        help="Only use newsletter data (no LLM)",
+    )
+    source_group.add_argument(
+        "--llm-only",
+        action="store_true",
+        help="Only use LLM (no newsletter matching)",
     )
 
     args = parser.parse_args()
@@ -197,14 +182,6 @@ def main():
             verbose=args.verbose,
         )
         sys.exit(exit_code)
-    elif args.command == "sync":
-        sync_links(
-            collection_id=args.collection,
-            dry_run=args.dry_run,
-            limit=args.limit,
-            show_unmatched=args.show_unmatched,
-            verbose=args.verbose,
-        )
     elif args.command == "list":
         list_links(collection_id=args.collection, verbose=args.verbose)
     elif args.command == "remove-duplicates":
@@ -216,6 +193,9 @@ def main():
             force=args.force,
             limit=args.limit,
             verbose=args.verbose,
+            newsletter_only=args.newsletter_only,
+            llm_only=args.llm_only,
+            show_unmatched=args.show_unmatched,
         )
 
 

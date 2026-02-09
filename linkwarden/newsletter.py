@@ -57,3 +57,21 @@ def load_newsletter_index(
                 if path_key:
                     fuzzy_index[path_key] = data
     return exact_index, fuzzy_index
+
+
+def match_newsletter(link, newsletter_index, newsletter_fuzzy_index):
+  """Try to match a link against the newsletter index.
+
+  Returns (nl_data, match_type) or (None, None).
+  """
+  lw_url = link.get("url", "")
+  normalized = normalize_url(lw_url)
+
+  if normalized in newsletter_index:
+    return newsletter_index[normalized], "exact"
+
+  path_key = get_url_path_key(lw_url)
+  if path_key in newsletter_fuzzy_index:
+    return newsletter_fuzzy_index[path_key], "fuzzy"
+
+  return None, None
