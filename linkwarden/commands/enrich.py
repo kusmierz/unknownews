@@ -143,19 +143,19 @@ def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose
         console.print(f"  [blue]newsletter:[/blue]")
 
         if "name" in nl_changes:
-            show_diff(link_name, html.unescape(final["name"]), indent="    ")
+            show_diff(link_name, html.unescape(final["name"]), indent="    ", label="title")
         if "url" in nl_changes:
-            show_diff(link_url, final["url"], indent="    ", muted=True)
+            show_diff(link_url, final["url"], indent="    ", muted=True, label="url")
         if nl_changes.get("new_tags"):
             console.print(f"    [green]+ tags: {', '.join(nl_changes['new_tags'])}[/green]")
         # Show existing extra tags (not the system ones we're adding)
         all_system = set(nl_changes.get("all_system_tags", []))
         extra_tags = existing_tags - all_system - {"unknow"}
         if extra_tags:
-            console.print(f"    [dim]  tags: {', '.join(sorted(extra_tags))}[/dim]")
+            console.print(f"    [dim]= tags: {', '.join(sorted(extra_tags))}[/dim]")
         if "description" in nl_changes:
             if existing_desc:
-                show_diff(html.unescape(existing_desc), html.unescape(final["description"]), indent="    ")
+                show_diff(html.unescape(existing_desc), html.unescape(final["description"]), indent="    ", label="desc")
             else:
                 console.print(f"    [green]+ desc: {html.unescape(final['description'])}[/green]")
 
@@ -164,11 +164,11 @@ def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose
         console.print(f"  [magenta]llm:[/magenta]")
 
         if "name" in llm_changes:
-            show_diff(link_name, final["name"], indent="    ")
+            show_diff(link_name, final["name"], indent="    ", label="title")
         if "url" in llm_changes and "url" not in (nl_changes or {}):
-            show_diff(link_url, final["url"], indent="    ", muted=True)
+            show_diff(link_url, final["url"], indent="    ", muted=True, label="url")
         if "description" in llm_changes:
-            show_diff(existing_desc or "(empty)", final["description"], indent="    ")
+            show_diff(existing_desc or "", final["description"], indent="    ", label="desc")
         if llm_changes.get("tags"):
             tags_display = ", ".join(
                 f"[{get_tag_color(t)}]{t}[/{get_tag_color(t)}]" for t in llm_changes["tags"]
@@ -178,13 +178,13 @@ def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose
             cat_str = llm_changes["category"]
             if llm_changes.get("suggested_category"):
                 cat_str += f" [yellow](suggested: {llm_changes['suggested_category']})[/yellow]"
-            console.print(f"    [dim]category: {cat_str}[/dim]")
+            console.print(f"    [green]+ category:[/green] {cat_str}")
 
         # Show preserved system tags (only in LLM section)
         system_tags = get_system_tags(link.get("tags", []))
         if system_tags and not nl_changes:
             preserved = ", ".join(t.get("name", "") for t in system_tags)
-            console.print(f"    [dim]preserved: {preserved}[/dim]")
+            console.print(f"    [dim]= tags: {preserved}[/dim]")
 
         if verbose:
             existing_count = len(system_tags) if system_tags else 0

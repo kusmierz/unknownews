@@ -21,7 +21,7 @@ def get_tag_color(tag_name: str) -> str:
     return TAG_COLORS[tag_hash % len(TAG_COLORS)]
 
 
-def show_diff(old: str, new: str, indent: str = "      ", muted: bool = False) -> None:
+def show_diff(old: str, new: str, indent: str = "      ", muted: bool = False, label: str = "") -> None:
     """Show diff with highlighted changes using rich."""
     matcher = difflib.SequenceMatcher(None, old, new)
 
@@ -36,8 +36,12 @@ def show_diff(old: str, new: str, indent: str = "      ", muted: bool = False) -
 
     old_text = Text()
     old_text.append(f"{indent}- ", style=old_style)
+    if label:
+        old_text.append(f"{label}: ", style=old_style)
     new_text = Text()
     new_text.append(f"{indent}+ ", style=new_style)
+    if label:
+        new_text.append(f"{label}: ", style=new_style)
 
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":

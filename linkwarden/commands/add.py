@@ -153,7 +153,7 @@ def add_link(
             )
             console.print(f"[green]+ tags:[/green] {tags_display}")
         if category:
-            console.print(f"category: {category}")
+            console.print(f"[green]+ category:[/green] {category}")
 
         console.print()
 
