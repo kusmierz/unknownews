@@ -7,6 +7,7 @@ from typing import Optional
 from .cache import get_cache, set_cache, remove_cache
 
 CACHE_TYPE = "llm"
+CACHE_TTL_DAYS = 7
 
 
 def get_cached(url: str) -> Optional[dict]:
@@ -18,7 +19,7 @@ def get_cached(url: str) -> Optional[dict]:
     Returns:
         Cached enrichment result dict or None
     """
-    return get_cache(url, CACHE_TYPE)
+    return get_cache(url, CACHE_TYPE, max_age_days=CACHE_TTL_DAYS)
 
 
 def set_cached(url: str, result: dict) -> None:
@@ -28,7 +29,7 @@ def set_cached(url: str, result: dict) -> None:
         url: URL key
         result: Enrichment result to cache
     """
-    set_cache(url, result, CACHE_TYPE)
+    set_cache(url, result, CACHE_TYPE, ttl_days=CACHE_TTL_DAYS)
 
 
 def remove_cached(url: str) -> None:

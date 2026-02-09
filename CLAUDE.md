@@ -112,7 +112,7 @@ Modular Linkwarden tools for enriching links and managing duplicates. Uses `rich
 - `content_fetcher.py` - Content fetching orchestrator (re-exports `RateLimitError` for backward compat)
   - `fetch_content(url)` - orchestrates content fetching based on URL type
   - `format_content_for_llm(content_data)` - formats fetch_content() output as XML for LLM
-- `article_fetcher.py` - Article content fetching
+- `article_fetcher.py` - Article content fetching (cached 7 days)
   - `fetch_article_content(url)` - uses trafilatura to extract article content
 - `video_fetcher.py` - Video content fetching
   - `fetch_video_content(url)` - uses yt-dlp for metadata + youtube-transcript-api for transcripts (cached 7 days)
@@ -128,6 +128,8 @@ Modular Linkwarden tools for enriching links and managing duplicates. Uses `rich
   - `parse_json_response(text)` - parses JSON from LLM response, decodes HTML entities
 - `llm_cache.py` - Thin wrapper around unified cache for LLM results (no expiry)
   - `get_cached(url)` / `set_cached(url, result)` / `remove_cached(url)`
+- `article_cache.py` - Thin wrapper around unified cache for article content (7-day TTL)
+  - `get_cached(url)` / `set_cached(url, data)`
 - `yt_dlp_cache.py` - Thin wrapper around unified cache for yt-dlp video info (7-day TTL)
   - `get_cached(url)` / `set_cached(url, info_dict)`
 - `collections_cache.py` - Thin wrapper around unified cache for collections (1-day TTL)
@@ -153,6 +155,7 @@ data/
   last-fetch_cache.txt    # daily cache timestamp (YYYY-MM-DD)
 
 cache/                    # unified cache directory (managed by cache.py)
+  article.json            # cached article content (per URL, 7-day TTL)
   llm.json                # cached LLM enrichment results (per URL, no expiry)
   yt_dlp.json             # cached yt-dlp video info (per URL, 7-day TTL, ~12 KB per video)
   collections.json        # cached collections list (1-day TTL)

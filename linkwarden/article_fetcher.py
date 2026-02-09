@@ -8,6 +8,7 @@ import trafilatura
 
 from .fetcher_utils import truncate_content
 from .display import console
+from . import article_cache
 
 ARTICLE_MAX_CHARS = 64000
 
@@ -32,6 +33,13 @@ def fetch_article_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]
             }
         }
     """
+    # Check cache first
+    cached = article_cache.get_cached(url)
+    if cached is not None:
+        if verbose:
+            console.print("[dim]  Using cached article content[/dim]")
+        return cached
+
     try:
         # Download content
         downloaded = trafilatura.fetch_url(url)
@@ -79,6 +87,7 @@ def fetch_article_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]
             }
         }
 
+        article_cache.set_cached(url, result)
         return result
 
     except Exception:
