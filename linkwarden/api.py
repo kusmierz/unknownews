@@ -6,7 +6,7 @@ from .config import get_api_config
 _verbose = False
 
 
-def set_verbose(enabled: bool) -> None:
+def set_verbose(enabled: int | bool) -> None:
     """Enable or disable verbose API logging."""
     global _verbose
     _verbose = enabled

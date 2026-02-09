@@ -12,7 +12,7 @@ from .display import console
 DEFAULT_MODEL = "gpt-4o-mini"
 
 
-def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: int = 1, verbose: bool = False) -> str | None:
+def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: int = 1, verbose: int = 0) -> str | None:
   api_key = os.environ.get("OPENAI_API_KEY")
   model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
   base_url = os.environ.get("OPENAI_BASE_URL")
@@ -24,8 +24,8 @@ def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: in
 
   use_responses_api = os.environ.get("OPENAI_USE_RESPONSE_API", "").lower() in ("1", "true", "yes")
 
-  # Show detailed request info if verbose flag is set
-  if verbose:
+  # Show LLM config and prompts only at -vv level
+  if verbose >= 2:
     from rich.panel import Panel
     from rich.table import Table
     from rich.markdown import Markdown

@@ -6,7 +6,7 @@ from ..display import console, show_diff
 from ..duplicates import find_duplicates
 
 
-def remove_duplicates(dry_run: bool = False, verbose: bool = False) -> None:
+def remove_duplicates(dry_run: bool = False, verbose: int = 0) -> None:
     """Fetch all links across all collections, find duplicates, and remove them.
 
     Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.

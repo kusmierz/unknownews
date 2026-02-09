@@ -13,7 +13,7 @@ from ..display import console, get_tag_color
 from ..duplicates import find_duplicates
 
 
-def list_links(collection_id: int | None = None, verbose: bool = False) -> None:
+def list_links(collection_id: int | None = None, verbose: int = 0) -> None:
     """List all links grouped by collection.
 
     Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.

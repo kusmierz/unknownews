@@ -110,7 +110,7 @@ def needs_enrichment(link: dict, force: bool = False) -> dict:
     }
 
 
-def enrich_link(url: str, prompt_path: str | None = None, verbose: bool = False) -> dict | None:
+def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> dict | None:
     """Call LLM to enrich a link with title, description, and tags.
 
     Uses OpenAI-compatible API. Configure via environment variables:
@@ -122,7 +122,7 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: bool = False)
     Args:
         url: The URL to enrich
         prompt_path: Path to the prompt template file
-        verbose: If True, show detailed LLM request information
+        verbose: Verbosity level (0=quiet, 1=details, 2=LLM prompts)
 
     Returns:
         Dict with keys: title, description, tags (list), category, suggested_category
@@ -131,7 +131,7 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: bool = False)
     # Check cache first
     cached_result = llm_cache.get_cached(url)
     if cached_result is not None:
-        if verbose:
+        if verbose >= 1:
             console.print("[dim]✓ Using cached LLM result[/dim]")
         return cached_result
 
@@ -166,12 +166,12 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: bool = False)
         console.print("[yellow]Empty response from API[/yellow]")
         return None
 
-    if verbose:
+    if verbose >= 2:
         console.print(f"[dim]  LLM response: {len(response_text):,} chars[/dim]")
 
     result = parse_json_response(response_text)
     if result:
-        if verbose and not result.get("_skipped"):
+        if verbose >= 2 and not result.get("_skipped"):
             title_len = len(result.get("title", ""))
             desc_len = len(result.get("description", ""))
             num_tags = len(result.get("tags", []))

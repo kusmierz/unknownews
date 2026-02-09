@@ -75,9 +75,10 @@ def main():
         help="No output, just exit code (ignored with --dry-run)",
     )
     add_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show detailed LLM request information",
+        "-v", "--verbose",
+        action="count",
+        default=0,
+        help="-v for details, -vv for LLM prompts",
     )
 
     # list command
@@ -89,9 +90,10 @@ def main():
         help="Filter to specific collection ID",
     )
     list_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show URLs and full descriptions",
+        "-v", "--verbose",
+        action="count",
+        default=0,
+        help="-v for URLs and descriptions, -vv for full details",
     )
 
     # remove-duplicates command
@@ -102,9 +104,10 @@ def main():
         help="Preview deletions without actually deleting",
     )
     dup_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show detailed matching keys and metadata",
+        "-v", "--verbose",
+        action="count",
+        default=0,
+        help="-v for details, -vv for full metadata",
     )
 
     # enrich command
@@ -137,9 +140,10 @@ def main():
         help="Show URLs not found in newsletter index",
     )
     enrich_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show detailed information",
+        "-v", "--verbose",
+        action="count",
+        default=0,
+        help="-v for details, -vv for LLM prompts",
     )
     # Mutually exclusive: --newsletter-only vs --llm-only
     source_group = enrich_parser.add_mutually_exclusive_group()
@@ -164,7 +168,7 @@ def main():
     load_dotenv()
 
     # Enable verbose API logging if requested
-    if getattr(args, "verbose", False):
+    if getattr(args, "verbose", 0):
         set_verbose(True)
 
     # add command handles its own header

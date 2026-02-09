@@ -12,7 +12,7 @@ from .display import console
 ARTICLE_MAX_CHARS = 64000
 
 
-def fetch_article_content(url: str, verbose: bool = False) -> Optional[Dict[str, Any]]:
+def fetch_article_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
     """
     Fetch article content using trafilatura.
 

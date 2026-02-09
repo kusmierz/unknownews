@@ -252,7 +252,7 @@ def enrich_links(
     dry_run: bool = False,
     force: bool = False,
     limit: int = 0,
-    verbose: bool = False,
+    verbose: int = 0,
     newsletter_only: bool = False,
     llm_only: bool = False,
     show_unmatched: bool = False,
@@ -267,7 +267,7 @@ def enrich_links(
         dry_run: If True, preview changes without updating
         force: If True, regenerate all LLM fields even if not empty
         limit: Maximum number of links to process (0 = no limit)
-        verbose: If True, show detailed information
+        verbose: Verbosity level (0=quiet, 1=details, 2=LLM prompts)
         newsletter_only: If True, only use newsletter data (no LLM)
         llm_only: If True, only use LLM (no newsletter matching)
         show_unmatched: If True, show URLs not found in newsletter index

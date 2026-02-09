@@ -13,7 +13,7 @@ from .video_fetcher import fetch_video_content
 from .display import console
 
 
-def fetch_content(url: str, verbose: bool = False) -> Optional[Dict[str, Any]]:
+def fetch_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
     """
     Orchestrate content fetching based on URL type.
 

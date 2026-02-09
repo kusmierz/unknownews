@@ -25,6 +25,10 @@ python linkwarden.py add <url> --collection 14    # specify target collection
 python linkwarden.py add <url> --unread           # add with "unread" tag
 python linkwarden.py add <url> --silent           # no output, just exit code
 
+# Verbosity levels (all commands)
+python linkwarden.py <cmd> -v                     # short diagnostics (fetch info, cache hits)
+python linkwarden.py <cmd> -vv                    # full details (LLM prompts, config, response)
+
 # List links in Linkwarden
 python linkwarden.py list                    # list all links grouped by collection
 python linkwarden.py list --collection 14   # list links from specific collection
@@ -38,7 +42,8 @@ python linkwarden.py enrich --force               # overwrite all LLM fields
 python linkwarden.py enrich --dry-run             # preview without updating
 python linkwarden.py enrich --limit 5             # limit processed links
 python linkwarden.py enrich --show-unmatched      # show URLs not in newsletter
-python linkwarden.py enrich --verbose             # show detailed information
+python linkwarden.py enrich -v                    # short diagnostics
+python linkwarden.py enrich -vv                   # full details incl. LLM prompts
 
 # Remove duplicate links across all collections
 python linkwarden.py remove-duplicates --dry-run  # preview deletions

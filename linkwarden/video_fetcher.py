@@ -22,7 +22,7 @@ TRANSCRIPT_MAX_CHARS = 128000
 TRANSCRIPT_LANG_PRIORITY = ['en', 'pl']
 
 
-def extract_transcript_from_info(info_dict: Dict, verbose: bool = False) -> Optional[str]:
+def extract_transcript_from_info(info_dict: Dict, verbose: int = 0) -> Optional[str]:
     """
     Extract transcript using youtube-transcript-api.
 
@@ -92,7 +92,7 @@ def extract_transcript_from_info(info_dict: Dict, verbose: bool = False) -> Opti
         return None
 
 
-def fetch_video_content(url: str, verbose: bool = False) -> Optional[Dict[str, Any]]:
+def fetch_video_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
     """
     Fetch video metadata and transcript using yt-dlp.
 

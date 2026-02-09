@@ -13,7 +13,7 @@ def add_link(
     dry_run: bool = False,
     unread: bool = False,
     silent: bool = False,
-    verbose: bool = False,
+    verbose: int = 0,
 ) -> int:
     """Add a URL to Linkwarden with enrichment from newsletter or LLM.
 
@@ -23,7 +23,7 @@ def add_link(
         dry_run: If True, preview without adding
         unread: If True, add "unread" tag
         silent: If True, no output (ignored with dry_run)
-        verbose: If True, show detailed LLM request information
+        verbose: Verbosity level (0=quiet, 1=details, 2=LLM prompts)
 
     Returns:
         Exit code (0 = success, 1 = error)
