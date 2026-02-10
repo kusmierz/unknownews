@@ -156,12 +156,12 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
     try:
         content_data = fetch_content(url, verbose=verbose)
     except RateLimitError as e:
-        console.print(f"[red]✗ Rate limit error: {e}[/red]")
+        console.print(f"[red]  ✗ Rate limit error: {e}[/red]")
         console.print("[yellow]  Wait before retrying, or reduce request rate[/yellow]")
         raise  # Re-raise to fail enrichment command
     if not content_data:
-        console.print(f"[dim]⚠ Content fetch failed, skipping LLM enrichment (models can't fetch data)[/dim]")
-        return {"_skipped": True, "_reason": "Content fetch failed"}
+        console.print(f"[dim]  ⚠ No content extracted, skipping LLM enrichment[/dim]")
+        return {"_skipped": True, "_reason": "No content extracted"}
 
     formatted_content = format_content_for_llm(content_data)
     console.print(f"  [dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
@@ -170,11 +170,11 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
     response_text = call_api(formatted_content, prompt_template, verbose=verbose)
 
     if not response_text:
-        console.print("[yellow]Empty response from API[/yellow]")
+        console.print("[yellow]  Empty response from API[/yellow]")
         return None
 
     if verbose >= 2:
-        console.print(f"[dim]  LLM response: {len(response_text):,} chars[/dim]")
+        console.print(f"  [dim]  LLM response: {len(response_text):,} chars[/dim]")
 
     result = parse_json_response(response_text)
     if result:
@@ -187,6 +187,6 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
         # Cache the result
         llm_cache.set_cached(url, result)
         return result
-    console.print("[yellow]Failed to parse LLM response[/yellow]")
+    console.print("[yellow]  Failed to parse LLM response[/yellow]")
 
     return None

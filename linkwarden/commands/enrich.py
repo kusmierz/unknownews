@@ -79,6 +79,7 @@ def _prepare_llm(link, needs, prompt_path, verbose):
         console.print(f"\n[red]✗ Rate limit exceeded[/red]")
         console.print(f"[yellow]  {e}[/yellow]")
         console.print("[yellow]  Please wait before retrying or reduce request rate[/yellow]")
+        console.print("")
         return "rate_limited"
 
     if not result:
@@ -86,6 +87,7 @@ def _prepare_llm(link, needs, prompt_path, verbose):
 
     if result.get("_skipped"):
         console.print(f"  [yellow]Skipped: {result.get('_reason', 'unknown')}[/yellow]")
+        console.print("")
         return "failed"
 
     changes = {}
@@ -416,4 +418,4 @@ def enrich_links(
             for url in unmatched_urls:
                 console.print(f"  [dim]{url}[/dim]")
         else:
-            console.print(f"\n[dim]{len(unmatched_urls)} unmatched (use --show-unmatched to list)[/dim]")
+            console.print(f"\n[dim]{len(unmatched_urls)} unmatched with the newsletter (use --show-unmatched to list)[/dim]")

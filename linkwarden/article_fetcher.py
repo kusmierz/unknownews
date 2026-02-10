@@ -5,12 +5,16 @@ Article content fetching using trafilatura.
 from typing import Optional, Dict, Any
 
 import trafilatura
+from trafilatura.downloads import DEFAULT_HEADERS
 
 from .fetcher_utils import truncate_content
 from .display import console
 from . import article_cache
 
 ARTICLE_MAX_CHARS = 64000
+
+# Trafilatura advertises zstd but urllib3 can't decompress it, causing binary garbage.
+DEFAULT_HEADERS["accept-encoding"] = "gzip,deflate,br"
 
 
 def fetch_article_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
@@ -54,6 +58,8 @@ def fetch_article_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]
         text = trafilatura.extract(downloaded)
 
         if not text:
+            if verbose:
+                console.print("[dim]  ⚠ Text extraction failed (no readable content)[/dim]")
             return None
 
         if verbose and metadata:
