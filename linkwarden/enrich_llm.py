@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from .llm import call_api
 from .content_fetcher import fetch_content, format_content_for_llm, RateLimitError
-from . import llm_cache
+from . import llm_cache, article_cache, yt_dlp_cache
 from .display import console
 from .tag_utils import has_real_tags
 
@@ -122,6 +122,17 @@ def needs_enrichment(link: dict, force: bool = False) -> dict:
     }
 
 
+def _get_cached_title(url: str) -> str:
+    """Try to get the original title from content caches (article or yt-dlp)."""
+    cached = article_cache.get_cached(url)
+    if cached and cached.get("title"):
+        return cached["title"]
+    cached = yt_dlp_cache.get_cached(url)
+    if cached and cached.get("title"):
+        return cached["title"]
+    return ""
+
+
 def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> dict | None:
     """Call LLM to enrich a link with title, description, and tags.
 
@@ -143,6 +154,9 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
     # Check cache first
     cached_result = llm_cache.get_cached(url)
     if cached_result is not None:
+        # Backfill _original_title from content cache if missing
+        if "_original_title" not in cached_result:
+            cached_result["_original_title"] = _get_cached_title(url)
         if verbose >= 1:
             console.print("  [dim]✓ Using cached LLM result[/dim]")
         return cached_result
