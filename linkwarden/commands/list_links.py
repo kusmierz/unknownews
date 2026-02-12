@@ -11,6 +11,7 @@ from ..collections_cache import get_collections
 from ..config import get_api_config
 from ..display import console, get_tag_color
 from ..duplicates import find_duplicates
+from ..enrich_llm import is_title_empty
 
 
 def list_links(collection_id: int | None = None, verbose: int = 0) -> None:
@@ -63,7 +64,7 @@ def list_links(collection_id: int | None = None, verbose: int = 0) -> None:
         for link in sorted(coll_links, key=lambda x: x.get("id", 0)):
             link_id = link.get("id", "?")
             name = (link.get("name") or "").strip() or "Untitled"
-            if name == "Just a moment...":
+            if is_title_empty(name, link.get("url", "")):
                 name = "Untitled"
             desc = (link.get("description") or "").replace("\n", " ").strip()
             tags = [t.get("name", "") for t in link.get("tags", []) if t.get("name")]

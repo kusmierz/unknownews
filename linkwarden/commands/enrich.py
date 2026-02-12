@@ -7,7 +7,7 @@ from ..collections_cache import get_collections
 from ..config import get_api_config
 from ..content_fetcher import RateLimitError
 from ..display import console, show_diff, get_tag_color
-from ..enrich_llm import enrich_link, needs_enrichment
+from ..enrich_llm import enrich_link, is_title_empty, needs_enrichment
 from ..newsletter import load_newsletter_index, match_newsletter
 from ..tag_utils import get_system_tags
 from ..url_utils import normalize_url
@@ -100,11 +100,17 @@ def _prepare_llm(link, needs, prompt_path, verbose):
 
     if needs["title"] and result.get("title"):
         llm_title = result["title"]
-        # Apply bracket logic: "LLM title [Original title]"
-        if llm_title != link_name and link_name and link_name != "Untitled" and link_name != "Just a moment...":
+        org_title = result.get("_original_title", "")
+
+        if is_title_empty(link_name, link_url):
+            # Linkwarden title is bogus — use fetched original title for brackets
+            if org_title and org_title != llm_title:
+                changes["name"] = f"{llm_title} [{org_title}]"
+            else:
+                changes["name"] = llm_title
+        elif llm_title != link_name:
+            # Normal case: Linkwarden has a real title
             changes["name"] = f"{llm_title} [{html.unescape(link_name)}]"
-        else:
-            changes["name"] = llm_title
     if needs["description"] and result.get("description"):
         changes["description"] = result["description"]
     if needs["tags"] and result.get("tags"):
@@ -337,6 +343,7 @@ def enrich_links(
     nl_updated = 0
     llm_enriched = 0
     failed = 0
+    failed_links = []  # list of (link_id, url, reason)
     processed = 0
     unmatched_urls = []
 

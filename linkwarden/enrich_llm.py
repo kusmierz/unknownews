@@ -61,12 +61,20 @@ def parse_json_response(response_text: str) -> dict | None:
         return None
 
 
-def is_title_empty(name: str, url: str) -> bool:
-    """Check if a link title is considered empty.
+BOGUS_TITLES = {"just a moment...", "attention required!", "access denied", "untitled", "unknown"}
 
-    Empty means: empty string, or equals the URL domain.
+
+def is_title_empty(name: str, url: str) -> bool:
+    """Check if a link title is considered empty or bogus.
+
+    Empty/bogus means: empty string, equals the URL domain, or a known bogus title
+    (e.g. Cloudflare challenge pages).
     """
     if not name or not name.strip():
+        return True
+
+    name_lower = name.strip().lower()
+    if name_lower in BOGUS_TITLES:
         return True
 
     # Check if name is just the domain
@@ -76,11 +84,8 @@ def is_title_empty(name: str, url: str) -> bool:
         # Remove www. prefix for comparison
         if domain.startswith("www."):
             domain = domain[4:]
-        name_lower = name.strip().lower()
         if name_lower == domain.lower() or name_lower == f"www.{domain.lower()}":
             return True
-        if name_lower == "untitled":
-          return True
     except Exception:
         pass
 
@@ -178,6 +183,8 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
 
     result = parse_json_response(response_text)
     if result:
+        # Attach original title from content fetcher
+        result["_original_title"] = content_data.get("title") or ""
         if verbose >= 2 and not result.get("_skipped"):
             title_len = len(result.get("title", ""))
             desc_len = len(result.get("description", ""))
