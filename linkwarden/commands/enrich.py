@@ -67,7 +67,7 @@ def _prepare_newsletter(link, nl_data):
 def _prepare_llm(link, needs, prompt_path, verbose):
     """Prepare LLM changes for a link.
 
-    Returns a dict of proposed changes, or a string ("failed"/"rate_limited") on error.
+    Returns a dict of proposed changes, or a tuple ("failed", reason) / ("rate_limited", reason) on error.
     """
     link_url = link.get("url", "")
     link_name = link.get("name", "Untitled")
@@ -80,15 +80,16 @@ def _prepare_llm(link, needs, prompt_path, verbose):
         console.print(f"[yellow]  {e}[/yellow]")
         console.print("[yellow]  Please wait before retrying or reduce request rate[/yellow]")
         console.print("")
-        return "rate_limited"
+        return ("rate_limited", str(e))
 
     if not result:
-        return "failed"
+        return ("failed", "LLM returned no result")
 
     if result.get("_skipped"):
-        console.print(f"  [yellow]Skipped: {result.get('_reason', 'unknown')}[/yellow]")
+        reason = result.get("_reason", "unknown")
+        console.print(f"  [yellow]Skipped: {reason}[/yellow]")
         console.print("")
-        return "failed"
+        return ("failed", f"Skipped: {reason}")
 
     changes = {}
 
@@ -377,14 +378,14 @@ def enrich_links(
                 console.print(f"  [dim][link={_link_url}]{_link_url}[/link][/dim]")
                 header_shown = True
                 llm_changes = _prepare_llm(link, needs, prompt_path, verbose)
-                if llm_changes == "rate_limited":
+                if isinstance(llm_changes, tuple) and llm_changes[0] == "rate_limited":
                     console.print(f"\n[dim]Stopped after processing {processed} links[/dim]")
                     raise SystemExit(1)
 
         # Display + update as one block
         has_nl = nl_changes is not None
         has_llm = isinstance(llm_changes, dict) and len(llm_changes) > 0
-        llm_failed = llm_changes == "failed"
+        llm_failed = isinstance(llm_changes, tuple) and llm_changes[0] == "failed"
 
         if has_nl or has_llm:
             final = _build_final_values(link, nl_changes if has_nl else None, llm_changes if has_llm else None)
@@ -400,9 +401,11 @@ def enrich_links(
                     llm_enriched += 1
             else:
                 failed += 1
+                failed_links.append((link.get("id"), link.get("url", ""), "API update failed"))
             processed += 1
         elif llm_failed:
             failed += 1
+            failed_links.append((link.get("id"), link.get("url", ""), llm_changes[1]))
             processed += 1
         elif has_nl is False and nl_changes is None and use_newsletter and verbose:
             # Newsletter matched but already up-to-date
@@ -418,6 +421,11 @@ def enrich_links(
         parts.append(f"[red]{failed} failed[/red]")
 
     console.print(f"\n{dry_label}{', '.join(parts)}")
+
+    if failed_links:
+        console.print(f"\n[red]Failed ({len(failed_links)}):[/red]")
+        for link_id, url, reason in failed_links:
+            console.print(f"  [dim]#{link_id}[/dim] {url}  [red]{reason}[/red]")
 
     if use_newsletter and unmatched_urls:
         if show_unmatched:
