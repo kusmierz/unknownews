@@ -10,7 +10,7 @@ from .cache import get_cache, set_cache, clear_cache_type
 
 CACHE_TYPE = "collections"
 CACHE_KEY = "data"  # Single key for all collections
-CACHE_DURATION_DAYS = 1
+CACHE_TTL_DAYS = 1
 
 
 def get_collections() -> List[Dict[str, Any]]:
@@ -26,7 +26,7 @@ def get_collections() -> List[Dict[str, Any]]:
         ValueError: If LINKWARDEN_TOKEN is not set in environment
     """
     # Try cache first (with 1-day expiration)
-    collections = get_cache(CACHE_KEY, CACHE_TYPE, max_age_days=CACHE_DURATION_DAYS)
+    collections = get_cache(CACHE_KEY, CACHE_TYPE, max_age_days=CACHE_TTL_DAYS)
     if collections:
         return collections
 
@@ -34,7 +34,7 @@ def get_collections() -> List[Dict[str, Any]]:
     collections = fetch_all_collections()
 
     # Save to cache with TTL
-    set_cache(CACHE_KEY, collections, CACHE_TYPE, ttl_days=CACHE_DURATION_DAYS)
+    set_cache(CACHE_KEY, collections, CACHE_TYPE, ttl_days=CACHE_TTL_DAYS)
 
     return collections
 
