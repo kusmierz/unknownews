@@ -1,4 +1,4 @@
-"""Enrichment-specific LLM orchestration — fetches content, calls LLM, parses results."""
+"""Enrichment-specific LLM orchestration — calls LLM, parses results."""
 
 import html
 import json
@@ -7,8 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .llm import call_api
-from .content_fetcher import fetch_content, format_content_for_llm, RateLimitError
-from . import llm_cache, article_cache, yt_dlp_cache
+from . import llm_cache
 from .display import console
 from .tag_utils import has_real_tags
 
@@ -122,19 +121,8 @@ def needs_enrichment(link: dict, force: bool = False) -> dict:
     }
 
 
-def _get_cached_title(url: str) -> str:
-    """Try to get the original title from content caches (article or yt-dlp)."""
-    cached = article_cache.get_cached(url)
-    if cached and cached.get("title"):
-        return cached["title"]
-    cached = yt_dlp_cache.get_cached(url)
-    if cached and cached.get("title"):
-        return cached["title"]
-    return ""
-
-
-def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> dict | None:
-    """Call LLM to enrich a link with title, description, and tags.
+def enrich_content(url: str, formatted_content: str, original_title: str = "", prompt_path: str | None = None, verbose: int = 0) -> dict | None:
+    """Call LLM to enrich a URL given pre-formatted content.
 
     Uses OpenAI-compatible API. Configure via environment variables:
     - OPENAI_API_KEY: API key (required)
@@ -143,7 +131,9 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
     - OPENAI_USE_RESPONSE_API: Set to "1" to use Responses API
 
     Args:
-        url: The URL to enrich
+        url: The URL being enriched (used for caching)
+        formatted_content: Pre-formatted XML content string for the LLM prompt
+        original_title: Original title from content fetcher (attached to result)
         prompt_path: Path to the prompt template file
         verbose: Verbosity level (0=quiet, 1=details, 2=LLM prompts)
 
@@ -151,18 +141,8 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
         Dict with keys: title, description, tags (list), category, suggested_category
         Returns None on failure
     """
-    # Check cache first
-    cached_result = llm_cache.get_cached(url)
-    if cached_result is not None:
-        # Backfill _original_title from content cache if missing
-        if "_original_title" not in cached_result:
-            cached_result["_original_title"] = _get_cached_title(url)
-        if verbose >= 1:
-            console.print("  [dim]✓ Using cached LLM result[/dim]")
-        return cached_result
-
     if not prompt_path:
-      prompt_path = PROMPT_PATH
+        prompt_path = PROMPT_PATH
 
     # Load prompt template
     try:
@@ -170,20 +150,6 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         return None
-
-    # Try to fetch content locally
-    try:
-        content_data = fetch_content(url, verbose=verbose)
-    except RateLimitError as e:
-        console.print(f"[red]  ✗ Rate limit error: {e}[/red]")
-        console.print("[yellow]  Wait before retrying, or reduce request rate[/yellow]")
-        raise  # Re-raise to fail enrichment command
-    if not content_data:
-        console.print(f"[dim]  ⚠ No content extracted, skipping LLM enrichment[/dim]")
-        return {"_skipped": True, "_reason": "No content extracted"}
-
-    formatted_content = format_content_for_llm(content_data)
-    console.print(f"  [dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
 
     # Call API
     response_text = call_api(formatted_content, prompt_template, verbose=verbose)
@@ -196,18 +162,16 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0) -> d
         console.print(f"  [dim]  LLM response: {len(response_text):,} chars[/dim]")
 
     result = parse_json_response(response_text)
-    if result:
-        # Attach original title from content fetcher
-        result["_original_title"] = content_data.get("title") or ""
-        if verbose >= 2 and not result.get("_skipped"):
-            title_len = len(result.get("title", ""))
-            desc_len = len(result.get("description", ""))
-            num_tags = len(result.get("tags", []))
-            cat = result.get("category", "")
-            console.print(f"[dim]  Parsed: title({title_len} chars), desc({desc_len} chars), {num_tags} tags, category={cat}[/dim]")
-        # Cache the result
-        llm_cache.set_cached(url, result)
-        return result
-    console.print("[yellow]  Failed to parse LLM response[/yellow]")
+    if not result:
+        console.print("[yellow]  Failed to parse LLM response[/yellow]")
+        return None
 
-    return None
+    result["_original_title"] = original_title
+    if verbose >= 2 and not result.get("_skipped"):
+        title_len = len(result.get("title", ""))
+        desc_len = len(result.get("description", ""))
+        num_tags = len(result.get("tags", []))
+        cat = result.get("category", "")
+        console.print(f"[dim]  Parsed: title({title_len} chars), desc({desc_len} chars), {num_tags} tags, category={cat}[/dim]")
+    llm_cache.set_cached(url, result)
+    return result

@@ -169,6 +169,31 @@ def delete_link(link_id: int) -> bool:
     return True
 
 
+def fetch_link_archive(link_id: int, format_type: int) -> str | None:
+    """Fetch an archived version of a link from Linkwarden.
+
+    Args:
+        link_id: Link ID
+        format_type: Archive format (3=Readability JSON, 4=Monolith HTML)
+
+    Returns:
+        Response text content, or None on error/404
+    """
+    base_url, token = get_api_config()
+    headers = {"Authorization": f"Bearer {token}"}
+    url = f"{base_url}/api/v1/archives/{link_id}?format={format_type}"
+    _log_request("GET", url)
+    t0 = time.monotonic()
+    try:
+        response = requests.get(url, headers=headers)
+        _log_response(response, time.monotonic() - t0)
+        if not response.ok:
+            return None
+        return response.text
+    except Exception:
+        return None
+
+
 def create_link(
     url: str,
     name: str,

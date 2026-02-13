@@ -5,9 +5,9 @@ import html
 from ..links import fetch_collection_links, fetch_all_links, update_link
 from ..collections_cache import get_collections
 from ..config import get_api_config
-from ..content_fetcher import RateLimitError
+from ..content_enricher import enrich_link, RateLimitError
 from ..display import console, show_diff, get_tag_color
-from ..enrich_llm import enrich_link, is_title_empty, needs_enrichment
+from ..enrich_llm import is_title_empty, needs_enrichment
 from ..newsletter import load_newsletter_index, match_newsletter
 from ..tag_utils import get_system_tags
 from ..url_utils import normalize_url
@@ -74,7 +74,7 @@ def _prepare_llm(link, needs, prompt_path, verbose):
 
     try:
         with console.status("  Enriching...", spinner="dots"):
-            result = enrich_link(link_url, prompt_path, verbose=verbose)
+            result = enrich_link(link_url, prompt_path, verbose=verbose, link=link)
     except RateLimitError as e:
         console.print(f"\n[red]✗ Rate limit exceeded[/red]")
         console.print(f"[yellow]  {e}[/yellow]")

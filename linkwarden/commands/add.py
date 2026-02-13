@@ -3,7 +3,7 @@
 from ..links import create_link
 from ..collections_cache import get_collections
 from ..display import console, get_tag_color
-from ..enrich_llm import enrich_link
+from ..content_enricher import enrich_link
 from ..newsletter import load_newsletter_index
 from ..url_utils import normalize_url, get_url_path_key
 
