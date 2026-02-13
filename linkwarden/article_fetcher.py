@@ -11,7 +11,7 @@ from .fetcher_utils import truncate_content
 from .display import console
 from . import article_cache
 
-ARTICLE_MAX_CHARS = 64000
+ARTICLE_MAX_CHARS = 64_000
 
 # Trafilatura advertises zstd but urllib3 can't decompress it, causing binary garbage.
 DEFAULT_HEADERS["accept-encoding"] = "gzip,deflate,br"

@@ -17,7 +17,7 @@ from .display import console
 from . import yt_dlp_cache
 
 # Content truncation limits
-TRANSCRIPT_MAX_CHARS = 128000
+TRANSCRIPT_MAX_CHARS = 128_000
 # Language preference for subtitle extraction
 TRANSCRIPT_LANG_PRIORITY = ['en', 'pl']
 
