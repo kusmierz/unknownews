@@ -133,32 +133,37 @@ def _extract_page_content(page) -> str:
     """Extract page content, piercing shadow DOM if present.
 
     page.content() doesn't include shadow root content (used by MSN, etc.).
-    Falls back to regular HTML if no shadow DOM is detected.
+    If shadow DOM is found, its innerHTML is appended to the regular HTML
+    so both regular and shadow content are available for extraction.
     """
-    # Try to extract text from shadow DOM elements first
-    shadow_text = page.evaluate("""() => {
-        const walkers = [];
-        function collectShadowText(root) {
+    html = page.content()
+
+    shadow_html = page.evaluate("""() => {
+        const parts = [];
+        function collectShadowHTML(root) {
             const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
             let node = walker.nextNode();
             while (node) {
                 if (node.shadowRoot) {
-                    walkers.push(node.shadowRoot.innerHTML);
-                    collectShadowText(node.shadowRoot);
+                    parts.push(node.shadowRoot.innerHTML);
+                    collectShadowHTML(node.shadowRoot);
                 }
                 node = walker.nextNode();
             }
         }
-        collectShadowText(document);
-        return walkers.join('\\n');
+        collectShadowHTML(document);
+        return parts.join('\\n');
     }""")
 
-    if shadow_text and len(shadow_text) > 500:
-        # Wrap shadow content in proper HTML so trafilatura can parse it
-        title = page.title() or ""
-        return f"<html><head><title>{title}</title></head><body>{shadow_text}</body></html>"
+    if shadow_html:
+        # Inject shadow content before </body> so trafilatura sees both
+        insert_pos = html.rfind("</body>")
+        if insert_pos != -1:
+            html = html[:insert_pos] + shadow_html + html[insert_pos:]
+        else:
+            html += shadow_html
 
-    return page.content()
+    return html
 
 
 def fetch_article_with_playwright(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:

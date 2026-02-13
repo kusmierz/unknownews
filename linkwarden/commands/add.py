@@ -99,7 +99,12 @@ def add_link(
                 console.print(f"[red]Error: LLM couldn't access content: {result.get('_reason', 'unknown')}[/red]")
             return 1
 
-        title = result.get("title", "")
+        llm_title = result.get("title", "")
+        org_title = result.get("_original_title", "")
+        if llm_title and org_title and llm_title != org_title:
+            title = f"{llm_title} [{org_title}]"
+        else:
+            title = llm_title
         description = result.get("description", "")
         tags = result.get("tags", [])
         category = result.get("category", "")
