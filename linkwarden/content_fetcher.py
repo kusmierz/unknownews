@@ -9,9 +9,10 @@ from typing import Optional, Dict, Any
 
 import json as _json
 
-from .fetcher_utils import is_video_url, truncate_content, RateLimitError, ContentFetchError, check_url_head  # noqa: F401
+from .fetcher_utils import is_video_url, is_document_content_type, is_document_url, truncate_content, RateLimitError, ContentFetchError, check_url_head  # noqa: F401
 from .article_fetcher import fetch_article_content, fetch_article_with_playwright, extract_article_from_html
 from .video_fetcher import fetch_video_content
+from .document_fetcher import fetch_document_content
 from .api import fetch_link_archive
 from .display import console
 
@@ -73,6 +74,28 @@ def fetch_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
                 if verbose >= 1:
                     console.print(f"  [dim]⚠ URL unreachable (HTTP {head['status']})[/dim]")
                 return {"_skip_fallback": True, "_reason": f"HTTP {head['status']}"}
+
+            # Check for document types (PDF, DOCX, etc.)
+            doc_type = is_document_content_type(head["content_type"]) or is_document_url(url)
+            if doc_type:
+                if verbose >= 1:
+                    console.print(f"  [dim]📄 Document detected ({doc_type})[/dim]")
+                doc_data = fetch_document_content(url, doc_type, verbose=verbose)
+                if not doc_data:
+                    return None
+                return {
+                    "content_type": "document",
+                    "url": url,
+                    "title": doc_data.get("title"),
+                    "text_content": doc_data.get("text_content"),
+                    "transcript": None,
+                    "chapters": None,
+                    "tags": None,
+                    "metadata": doc_data.get("metadata", {}),
+                    "fetch_method": "markitdown",
+                    "success": True,
+                }
+
             if not head["is_html"]:
                 if verbose >= 1:
                     console.print(f"  [dim]⚠ Non-HTML content ({head['content_type']})[/dim]")
@@ -212,6 +235,16 @@ def format_content_for_llm(content_data: dict) -> str:
             lines.append(f"<sitename>{metadata['sitename']}</sitename>")
 
         # Article content
+        if content_data.get('text_content'):
+            lines.append("<content>")
+            lines.append(content_data['text_content'])
+            lines.append("</content>")
+
+    elif content_data['content_type'] == 'document':
+        metadata = content_data.get('metadata', {})
+        if metadata.get('doc_type'):
+            lines.append(f"<doc_type>{metadata['doc_type']}</doc_type>")
+
         if content_data.get('text_content'):
             lines.append("<content>")
             lines.append(content_data['text_content'])

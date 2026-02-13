@@ -133,6 +133,50 @@ def check_url_head(url: str, timeout: int = 5) -> dict:
         return {"status": 0, "content_type": "", "is_html": True, "fetchable": True}
 
 
+_DOCUMENT_MIME_TYPES = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-excel": "xls",
+    "application/msword": "doc",
+}
+
+_DOCUMENT_EXTENSIONS = {
+    ".pdf": "pdf",
+    ".docx": "docx",
+    ".pptx": "pptx",
+    ".xlsx": "xlsx",
+    ".xls": "xls",
+    ".doc": "doc",
+}
+
+
+def is_document_content_type(content_type: str) -> str | None:
+    """Check if Content-Type indicates a document format.
+
+    Returns doc type label (e.g. "pdf", "docx") or None.
+    """
+    ct = content_type.lower().split(";")[0].strip()
+    return _DOCUMENT_MIME_TYPES.get(ct)
+
+
+def is_document_url(url: str) -> str | None:
+    """Check if URL path extension indicates a document format.
+
+    Fallback for when Content-Type is generic (e.g. application/octet-stream).
+    Returns doc type label or None.
+    """
+    try:
+        path = urlparse(url).path.lower()
+        for ext, doc_type in _DOCUMENT_EXTENSIONS.items():
+            if path.endswith(ext):
+                return doc_type
+    except Exception:
+        pass
+    return None
+
+
 def is_video_url(url: str) -> bool:
     """
     Detect if URL points to a video platform.
