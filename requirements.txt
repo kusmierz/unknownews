@@ -6,3 +6,4 @@ openai
 trafilatura
 yt-dlp[default,curl-cffi]
 youtube-transcript-api
+playwright

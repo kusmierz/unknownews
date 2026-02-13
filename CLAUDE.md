@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Tools
+
+- **Context7 MCP** is available for looking up library documentation. Use `resolve-library-id` then `query-docs` to get up-to-date docs and code examples for any dependency.
+
 ## Project overview
 
 Python scraper and crawler for unknownews newsletter (mrugalski.pl). Extracts structured JSON from newsletter HTML pages with automatic crawling of previous issues.

@@ -6,6 +6,8 @@ import math
 from typing import Tuple
 from urllib.parse import urlparse
 
+import requests
+
 
 class ContentFetchError(Exception):
     """Base exception for content fetching errors that should be raised to caller."""
@@ -107,6 +109,28 @@ def format_duration_short(seconds: int) -> str:
     if rounded == int(rounded):
         return f"{int(rounded)}h"
     return f"~{rounded:.1f}h"
+
+
+def check_url_head(url: str, timeout: int = 5) -> dict:
+    """Issue a HEAD request to check URL reachability and content type.
+
+    Returns:
+        Dict with keys:
+            status (int): HTTP status code, 0 on network error
+            content_type (str): Content-Type header value
+            is_html (bool): True if content-type contains text/html
+            fetchable (bool): True if status is 2xx/3xx (or unknown on error)
+    """
+    try:
+        resp = requests.head(url, timeout=timeout, allow_redirects=True)
+        status = resp.status_code
+        content_type = resp.headers.get("content-type", "").lower()
+        is_html = "text/html" in content_type or "application/xhtml+xml" in content_type
+        fetchable = status < 400
+        return {"status": status, "content_type": content_type, "is_html": is_html, "fetchable": fetchable}
+    except Exception:
+        # Network error / timeout — assume fetchable HTML so we still try
+        return {"status": 0, "content_type": "", "is_html": True, "fetchable": True}
 
 
 def is_video_url(url: str) -> bool:

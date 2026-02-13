@@ -173,5 +173,6 @@ def enrich_content(url: str, formatted_content: str, original_title: str = "", p
         num_tags = len(result.get("tags", []))
         cat = result.get("category", "")
         console.print(f"[dim]  Parsed: title({title_len} chars), desc({desc_len} chars), {num_tags} tags, category={cat}[/dim]")
-    llm_cache.set_cached(url, result)
+    if not result.get("_skipped"):
+        llm_cache.set_cached(url, result)
     return result

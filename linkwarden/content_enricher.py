@@ -35,7 +35,7 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0, link
     """
     # Check LLM cache first — skip expensive content fetch if already enriched
     cached_result = llm_cache.get_cached(url)
-    if cached_result is not None:
+    if cached_result is not None and not cached_result.get("_skipped"):
         if "_original_title" not in cached_result:
             cached_result["_original_title"] = _get_cached_title(url)
         if verbose >= 1:
@@ -49,6 +49,10 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0, link
         console.print(f"[red]  ✗ Rate limit error: {e}[/red]")
         console.print("[yellow]  Wait before retrying, or reduce request rate[/yellow]")
         raise  # Re-raise to fail enrichment command
+    if content_data and content_data.get("_skip_fallback"):
+        reason = content_data.get("_reason", "")
+        console.print(f"[dim]  ⚠ {reason}, skipping enrichment[/dim]")
+        return {"_skipped": True, "_reason": reason}
     if not content_data and link:
         content_data = fetch_linkwarden_content(link, verbose=verbose)
     if not content_data:

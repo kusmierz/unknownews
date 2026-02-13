@@ -9,8 +9,8 @@ from typing import Optional, Dict, Any
 
 import json as _json
 
-from .fetcher_utils import is_video_url, truncate_content, RateLimitError, ContentFetchError  # noqa: F401
-from .article_fetcher import fetch_article_content, extract_article_from_html
+from .fetcher_utils import is_video_url, truncate_content, RateLimitError, ContentFetchError, check_url_head  # noqa: F401
+from .article_fetcher import fetch_article_content, fetch_article_with_playwright, extract_article_from_html
 from .video_fetcher import fetch_video_content
 from .api import fetch_link_archive
 from .display import console
@@ -67,9 +67,28 @@ def fetch_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
                 "success": True,
             }
         else:
+            # HEAD pre-check: skip body fetch for dead URLs and non-HTML content
+            head = check_url_head(url)
+            if not head["fetchable"]:
+                if verbose >= 1:
+                    console.print(f"  [dim]⚠ URL unreachable (HTTP {head['status']})[/dim]")
+                return {"_skip_fallback": True, "_reason": f"HTTP {head['status']}"}
+            if not head["is_html"]:
+                if verbose >= 1:
+                    console.print(f"  [dim]⚠ Non-HTML content ({head['content_type']})[/dim]")
+                return {"_skip_fallback": True, "_reason": f"Non-HTML: {head['content_type']}"}
+
             article_data = fetch_article_content(url, verbose=verbose)
+
+            if not article_data:
+                if verbose >= 1:
+                    console.print("  [dim]⚠ Trafilatura failed, trying Playwright…[/dim]")
+                article_data = fetch_article_with_playwright(url, verbose=verbose)
+
             if not article_data:
                 return None
+
+            fetch_method = article_data.get("_fetch_method", "trafilatura")
 
             return {
                 "content_type": "article",
@@ -80,7 +99,7 @@ def fetch_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
                 "chapters": None,
                 "tags": None,
                 "metadata": article_data.get("metadata", {}),
-                "fetch_method": "trafilatura",
+                "fetch_method": fetch_method,
                 "success": True,
             }
 
