@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 from .cache import get_cache, set_cache, remove_cache
 
 CACHE_TYPE = "yt_dlp"
-CACHE_TTL_DAYS = 7  # Video metadata rarely changes
+CACHE_TTL_DAYS = 180  # Video metadata rarely changes
 
 
 def get_cached(url: str) -> Optional[Dict[str, Any]]:

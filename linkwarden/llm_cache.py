@@ -7,7 +7,7 @@ from typing import Optional
 from .cache import get_cache, set_cache, remove_cache
 
 CACHE_TYPE = "llm"
-CACHE_TTL_DAYS = 7
+CACHE_TTL_DAYS = 30
 
 
 def get_cached(url: str) -> Optional[dict]:

@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 from .cache import get_cache, set_cache, remove_cache
 
 CACHE_TYPE = "article"
-CACHE_TTL_DAYS = 7
+CACHE_TTL_DAYS = 180
 
 
 def get_cached(url: str) -> Optional[Dict[str, Any]]:
