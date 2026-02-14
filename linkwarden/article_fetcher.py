@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 import trafilatura
+from markitdown import MarkItDown
 from trafilatura.downloads import DEFAULT_HEADERS
 
 from .fetcher_utils import truncate_content
@@ -88,7 +89,13 @@ def extract_article_from_html(html: str, fallback_title: str = "", verbose: int 
     """
     try:
         metadata = trafilatura.extract_metadata(html)
-        text = trafilatura.extract(html, output_format='markdown')
+        article_html = trafilatura.extract(html, output_format='html', include_formatting=True)
+
+        if article_html:
+            md_result = MarkItDown().convert_stream(BytesIO(article_html.encode()), file_extension='.html')
+            text = md_result.markdown.strip()
+        else:
+            text = trafilatura.extract(html) or ""
 
         if not text:
             if verbose:
