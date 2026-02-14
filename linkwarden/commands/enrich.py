@@ -73,8 +73,8 @@ def _prepare_llm(link, needs, prompt_path, verbose):
     link_name = link.get("name", "Untitled")
 
     try:
-        with console.status("  Enriching...", spinner="dots"):
-            result = enrich_link(link_url, prompt_path, verbose=verbose, link=link)
+        with console.status("  Enriching...", spinner="dots") as status:
+            result = enrich_link(link_url, prompt_path, verbose=verbose, link=link, status=status)
     except RateLimitError as e:
         console.print(f"\n[red]✗ Rate limit exceeded[/red]")
         console.print(f"[yellow]  {e}[/yellow]")

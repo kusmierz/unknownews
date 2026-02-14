@@ -17,7 +17,7 @@ def _get_cached_title(url: str) -> str:
     return ""
 
 
-def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0, link: dict | None = None) -> dict | None:
+def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0, link: dict | None = None, status=None) -> dict | None:
     """Fetch content for a URL and enrich it with LLM.
 
     Tries fetch_content() first; if that fails and a Linkwarden link dict is provided,
@@ -28,6 +28,7 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0, link
         prompt_path: Path to the prompt template file
         verbose: Verbosity level (0=quiet, 1=details, 2=LLM prompts)
         link: Optional Linkwarden link dict for fallback content fetching
+        status: Optional rich Status object to update with phase info
 
     Returns:
         Dict with keys: title, description, tags, category, suggested_category
@@ -43,6 +44,8 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0, link
         return cached_result
 
     # Fetch content
+    if hasattr(status, "update"):
+        status.update("  Fetching content...")
     try:
         content_data = fetch_content(url, verbose=verbose)
     except RateLimitError as e:
@@ -62,4 +65,6 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0, link
     formatted_content = format_content_for_llm(content_data)
     console.print(f"  [dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
 
+    if hasattr(status, "update"):
+        status.update("  Calling LLM...")
     return enrich_content(url, formatted_content, original_title=content_data.get("title") or "", prompt_path=prompt_path, verbose=verbose)

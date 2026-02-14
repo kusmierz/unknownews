@@ -87,7 +87,7 @@ def add_link(
         # Also call LLM to get category and real tags
         status = console.status("Enriching with LLM...", spinner="dots") if show_output else nullcontext()
         with status:
-            llm_result = enrich_link(normalized_url, verbose=verbose)
+            llm_result = enrich_link(normalized_url, verbose=verbose, status=status)
 
         if llm_result and not llm_result.get("_skipped"):
             llm_tags = llm_result.get("tags", [])
@@ -97,11 +97,9 @@ def add_link(
             source = f"newsletter ({match_type}) + LLM"
     else:
         # Use LLM enrichment
-        if show_output:
-            with console.status("Enriching link...", spinner="dots"):
-                result = enrich_link(normalized_url, verbose=verbose)
-        else:
-            result = enrich_link(normalized_url, verbose=verbose)
+        status = console.status("  Enriching link...", spinner="dots") if show_output else nullcontext()
+        with status:
+            result = enrich_link(normalized_url, verbose=verbose, status=status)
 
         if not result:
             if show_output:
