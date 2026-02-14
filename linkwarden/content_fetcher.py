@@ -68,40 +68,44 @@ def fetch_content(url: str, verbose: int = 0, force: bool = False) -> Optional[D
                 "success": True,
             }
         else:
-            # HEAD pre-check: skip body fetch for dead URLs and non-HTML content
-            head = check_url_head(url)
-            if not head["fetchable"]:
-                if verbose >= 1:
-                    console.print(f"  [dim]⚠ URL unreachable (HTTP {head['status']})[/dim]")
-                return {"_skip_fallback": True, "_reason": f"HTTP {head['status']}"}
-
-            # Check for document types (PDF, DOCX, etc.)
-            doc_type = is_document_content_type(head["content_type"]) or is_document_url(url)
-            if doc_type:
-                if verbose >= 1:
-                    console.print(f"  [dim]📄 Document detected ({doc_type})[/dim]")
-                doc_data = fetch_document_content(url, doc_type, verbose=verbose)
-                if not doc_data:
-                    return None
-                return {
-                    "content_type": "document",
-                    "url": url,
-                    "title": doc_data.get("title"),
-                    "text_content": doc_data.get("text_content"),
-                    "transcript": None,
-                    "chapters": None,
-                    "tags": None,
-                    "metadata": doc_data.get("metadata", {}),
-                    "fetch_method": "markitdown",
-                    "success": True,
-                }
-
-            if not head["is_html"]:
-                if verbose >= 1:
-                    console.print(f"  [dim]⚠ Non-HTML content ({head['content_type']})[/dim]")
-                return {"_skip_fallback": True, "_reason": f"Non-HTML: {head['content_type']}"}
-
+            # Check article cache before making any network requests
             article_data = fetch_article_content(url, verbose=verbose, force=force)
+
+            if not article_data:
+                # HEAD pre-check: skip body fetch for dead URLs and non-HTML content
+                head = check_url_head(url)
+                if not head["fetchable"]:
+                    if verbose >= 1:
+                        console.print(f"  [dim]⚠ URL unreachable (HTTP {head['status']})[/dim]")
+                    return {"_skip_fallback": True, "_reason": f"HTTP {head['status']}"}
+
+                # Check for document types (PDF, DOCX, etc.)
+                doc_type = is_document_content_type(head["content_type"]) or is_document_url(url)
+                if doc_type:
+                    if verbose >= 1:
+                        console.print(f"  [dim]📄 Document detected ({doc_type})[/dim]")
+                    doc_data = fetch_document_content(url, doc_type, verbose=verbose)
+                    if not doc_data:
+                        return None
+                    return {
+                        "content_type": "document",
+                        "url": url,
+                        "title": doc_data.get("title"),
+                        "text_content": doc_data.get("text_content"),
+                        "transcript": None,
+                        "chapters": None,
+                        "tags": None,
+                        "metadata": doc_data.get("metadata", {}),
+                        "fetch_method": "markitdown",
+                        "success": True,
+                    }
+
+                if not head["is_html"]:
+                    if verbose >= 1:
+                        console.print(f"  [dim]⚠ Non-HTML content ({head['content_type']})[/dim]")
+                    return {"_skip_fallback": True, "_reason": f"Non-HTML: {head['content_type']}"}
+
+                article_data = fetch_article_content(url, verbose=verbose, force=force)
 
             if not article_data:
                 if verbose >= 1:
