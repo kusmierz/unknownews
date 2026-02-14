@@ -88,7 +88,7 @@ def extract_article_from_html(html: str, fallback_title: str = "", verbose: int 
     """
     try:
         metadata = trafilatura.extract_metadata(html)
-        text = trafilatura.extract(html)
+        text = trafilatura.extract(html, output_format='markdown')
 
         if not text:
             if verbose:

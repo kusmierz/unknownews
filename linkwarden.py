@@ -37,7 +37,7 @@ from dotenv import load_dotenv
 # Import from linkwarden modules
 from linkwarden.display import console
 from linkwarden.api import set_verbose
-from linkwarden.commands import add_link, enrich_links, list_links, remove_duplicates
+from linkwarden.commands import add_link, enrich_links, fetch_url, list_links, remove_duplicates
 
 
 def main():
@@ -110,6 +110,35 @@ def main():
         help="-v for details, -vv for full metadata",
     )
 
+    # fetch command
+    fetch_parser = subparsers.add_parser("fetch", help="Fetch and display content for a URL")
+    fetch_parser.add_argument(
+        "url",
+        type=str,
+        help="URL to fetch",
+    )
+    fetch_parser.add_argument(
+        "--xml",
+        action="store_true",
+        help="Show XML formatted for LLM",
+    )
+    fetch_parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Show raw text content only",
+    )
+    fetch_parser.add_argument(
+        "--force", "-f",
+        action="store_true",
+        help="Bypass cache and re-fetch",
+    )
+    fetch_parser.add_argument(
+        "-v", "--verbose",
+        action="count",
+        default=0,
+        help="-v for fetch details",
+    )
+
     # enrich command
     enrich_parser = subparsers.add_parser("enrich", help="Enrich links (newsletter data + LLM)")
     enrich_parser.add_argument(
@@ -171,12 +200,20 @@ def main():
     if getattr(args, "verbose", 0):
         set_verbose(True)
 
-    # add command handles its own header
-    if args.command != "add" or args.silent:
-        if args.command != "add":
-            console.print(f"[bold]linkwarden[/bold] {args.command}\n")
+    # add/fetch commands handle their own header
+    if args.command not in ("add", "fetch") or (args.command == "add" and args.silent):
+        console.print(f"[bold]linkwarden[/bold] {args.command}\n")
 
-    if args.command == "add":
+    if args.command == "fetch":
+        exit_code = fetch_url(
+            url=args.url,
+            verbose=args.verbose,
+            xml=args.xml,
+            raw=args.raw,
+            force=args.force,
+        )
+        sys.exit(exit_code)
+    elif args.command == "add":
         exit_code = add_link(
             url=args.url,
             collection_id=args.collection,
