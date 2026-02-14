@@ -6,6 +6,7 @@ from rich.panel import Panel
 from ..content_fetcher import fetch_content
 from ..content_enricher import enrich_link
 from ..display import console
+from ..newsletter import load_newsletter_index, match_newsletter
 from ..summary_llm import summarize_content
 
 
@@ -102,13 +103,33 @@ def fetch_url(
 
 
 def _show_enrich(url: str, verbose: int = 0) -> None:
-    """Display enrichment data for a URL. Runs LLM enrichment if not cached."""
+    """Display enrichment data for a URL. Runs LLM enrichment if not cached.
+
+    Also checks newsletter index — if the URL is found, newsletter description
+    takes priority over LLM description (matching the enrich command behavior).
+    """
+    # Check newsletter for this URL
+    nl_data = None
+    try:
+        exact_index, fuzzy_index = load_newsletter_index()
+        nl_data, match_type = match_newsletter({"url": url}, exact_index, fuzzy_index)
+        if nl_data and verbose >= 1:
+            console.print(f"\n[dim]Newsletter match ({match_type}): {nl_data.get('title', '')}[/dim]")
+    except FileNotFoundError:
+        pass
 
     console.print("\n[dim]Running LLM enrichment...[/dim]")
     enriched = enrich_link(url, verbose=verbose)
     if not enriched or enriched.get("_skipped"):
         console.print("[red]Enrichment failed[/red]")
         return
+
+    # Merge: newsletter data takes priority over LLM
+    if nl_data:
+        if nl_data.get("description"):
+            enriched["description"] = nl_data["description"]
+        if nl_data.get("title"):
+            enriched["title"] = nl_data["title"]
 
     _render_enrich_panel(enriched)
 

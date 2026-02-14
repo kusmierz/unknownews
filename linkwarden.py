@@ -118,11 +118,6 @@ def main():
         help="URL to fetch",
     )
     fetch_parser.add_argument(
-        "--xml",
-        action="store_true",
-        help="Show XML formatted for LLM",
-    )
-    fetch_parser.add_argument(
         "--raw",
         action="store_true",
         help="Show raw text content only",
@@ -218,7 +213,6 @@ def main():
         exit_code = fetch_url(
             url=args.url,
             verbose=args.verbose,
-            xml=args.xml,
             raw=args.raw,
             force=args.force,
             enrich=args.enrich,
