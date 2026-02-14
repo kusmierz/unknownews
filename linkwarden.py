@@ -138,6 +138,12 @@ def main():
         help="Generate LLM summary",
     )
     fetch_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Output as JSON",
+    )
+    fetch_parser.add_argument(
         "-v", "--verbose",
         action="count",
         default=0,
@@ -217,6 +223,7 @@ def main():
             force=args.force,
             enrich=args.enrich,
             summary=args.summary,
+            json_output=args.json_output,
         )
         sys.exit(exit_code)
     elif args.command == "add":

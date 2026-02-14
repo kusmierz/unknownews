@@ -1,5 +1,7 @@
 """Fetch and display content for a URL."""
 
+import json
+
 from rich.markdown import Markdown
 from rich.panel import Panel
 
@@ -17,6 +19,7 @@ def fetch_url(
     force: bool = False,
     enrich: bool = False,
     summary: bool = False,
+    json_output: bool = False,
 ) -> int:
     """Fetch content for a URL and display results.
 
@@ -37,11 +40,26 @@ def fetch_url(
         console.print("[red]Error: --raw cannot be combined with --enrich, or --summary[/red]")
         return 1
 
+    if json_output and raw:
+      console.print("[red]Error: --json cannot be combined with --raw[/red]")
+      return 1
+
+    json_data: dict | None = {"url": url} if json_output else None
+
     # --enrich only: no need to fetch content ourselves
     if enrich:
-        _show_enrich(url, verbose)
+        if json_output:
+            enriched = _get_enrich_data(url, verbose)
+            if enriched:
+                for key in ("title", "description", "tags", "category"):
+                    if enriched.get(key):
+                        json_data[key] = enriched[key]
+        else:
+            _show_enrich(url, verbose)
         if not summary:
-          return 0
+            if json_output:
+                print(json.dumps(json_data, ensure_ascii=False, indent=2))
+            return 0
 
     result = fetch_content(url, verbose=verbose, force=force)
 
@@ -54,9 +72,25 @@ def fetch_url(
       console.print(f"[yellow]Skipped:[/yellow] {reason}")
       return 1
 
-    # --summary only: no need to fetch content ourselves
+    # --summary
     if summary:
-        _render_summary(summarize_content(result, verbose=verbose))
+        summary_text = summarize_content(result, verbose=verbose)
+        if json_output:
+            json_data["summary"] = summary_text
+            if not enrich:
+                text = result.get("transcript") or result.get("text_content") or ""
+                json_data["content"] = text
+            print(json.dumps(json_data, ensure_ascii=False, indent=2))
+            return 0
+        else:
+            _render_summary(summary_text)
+            return 0
+
+    # --json default (content only)
+    if json_output:
+        text = result.get("transcript") or result.get("text_content") or ""
+        json_data["content"] = text
+        print(json.dumps(json_data, ensure_ascii=False, indent=2))
         return 0
 
     if raw:
@@ -100,6 +134,31 @@ def fetch_url(
         console.print("[dim]No text content available[/dim]")
 
     return 0
+
+
+def _get_enrich_data(url: str, verbose: int = 0) -> dict | None:
+    """Get enrichment data for a URL without rendering.
+
+    Returns merged enrichment dict or None on failure.
+    """
+    nl_data = None
+    try:
+        exact_index, fuzzy_index = load_newsletter_index()
+        nl_data, _ = match_newsletter({"url": url}, exact_index, fuzzy_index)
+    except FileNotFoundError:
+        pass
+
+    enriched = enrich_link(url, verbose=verbose)
+    if not enriched or enriched.get("_skipped"):
+        return None
+
+    if nl_data:
+        if nl_data.get("description"):
+            enriched["description"] = nl_data["description"]
+        if nl_data.get("title"):
+            enriched["title"] = nl_data["title"]
+
+    return enriched
 
 
 def _show_enrich(url: str, verbose: int = 0) -> None:
