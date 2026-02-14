@@ -3,7 +3,7 @@
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from ..content_fetcher import fetch_content, format_content_for_llm
+from ..content_fetcher import fetch_content
 from ..content_enricher import enrich_link
 from ..display import console
 from ..summary_llm import summarize_content
@@ -12,7 +12,6 @@ from ..summary_llm import summarize_content
 def fetch_url(
     url: str,
     verbose: int = 0,
-    xml: bool = False,
     raw: bool = False,
     force: bool = False,
     enrich: bool = False,
@@ -23,7 +22,6 @@ def fetch_url(
     Args:
         url: URL to fetch
         verbose: Verbosity level
-        xml: Show XML formatted for LLM
         raw: Show raw text content only
         force: Bypass cache and re-fetch
         enrich: Show cached enrichment data (runs LLM if not cached)
@@ -32,10 +30,17 @@ def fetch_url(
     Returns:
         Exit code (0 = success, 1 = failure)
     """
+
+    if raw:
+      if enrich or summary:
+        console.print("[red]Error: --raw cannot be combined with --enrich, or --summary[/red]")
+        return 1
+
     # --enrich only: no need to fetch content ourselves
-    if enrich and not summary and not raw:
+    if enrich:
         _show_enrich(url, verbose)
-        return 0
+        if not summary:
+          return 0
 
     result = fetch_content(url, verbose=verbose, force=force)
 
@@ -49,7 +54,7 @@ def fetch_url(
       return 1
 
     # --summary only: no need to fetch content ourselves
-    if summary and not enrich and not raw:
+    if summary:
         _render_summary(summarize_content(result, verbose=verbose))
         return 0
 
@@ -59,10 +64,6 @@ def fetch_url(
             console.print(text)
         else:
             console.print("[dim]No text content available[/dim]")
-        return 0
-
-    if xml:
-        console.print(format_content_for_llm(result))
         return 0
 
     # Default: markdown rendering
@@ -96,12 +97,6 @@ def fetch_url(
         console.print(Markdown(text))
     else:
         console.print("[dim]No text content available[/dim]")
-
-    if enrich:
-        _show_enrich(url, verbose)
-
-    if summary:
-        _render_summary(summarize_content(result, verbose=verbose))
 
     return 0
 

@@ -1,5 +1,7 @@
 """Add link command - adds a URL to Linkwarden with newsletter or LLM enrichment."""
 
+from contextlib import nullcontext
+
 from ..links import create_link
 from ..collections_cache import get_collections
 from ..display import console, get_tag_color
@@ -81,6 +83,18 @@ def add_link(
         if date:
             tags.append(date)
         source = f"newsletter ({match_type})"
+
+        # Also call LLM to get category and real tags
+        status = console.status("Enriching with LLM...", spinner="dots") if show_output else nullcontext()
+        with status:
+            llm_result = enrich_link(normalized_url, verbose=verbose)
+
+        if llm_result and not llm_result.get("_skipped"):
+            llm_tags = llm_result.get("tags", [])
+            if llm_tags:
+                tags.extend(llm_tags)
+            category = llm_result.get("category", "")
+            source = f"newsletter ({match_type}) + LLM"
     else:
         # Use LLM enrichment
         if show_output:
