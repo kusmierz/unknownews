@@ -33,7 +33,7 @@ def set_cached(url: str, result: dict) -> None:
 
 
 def remove_cached(url: str) -> None:
-    """Remove cached LLM result for a URL after successful update.
+    """Remove cached LLM result for a URL.
 
     Args:
         url: URL to remove from cache

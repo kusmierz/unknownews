@@ -133,6 +133,16 @@ def main():
         help="Bypass cache and re-fetch",
     )
     fetch_parser.add_argument(
+        "--enrich",
+        action="store_true",
+        help="Show enrichment data from cache",
+    )
+    fetch_parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Generate LLM summary",
+    )
+    fetch_parser.add_argument(
         "-v", "--verbose",
         action="count",
         default=0,
@@ -211,6 +221,8 @@ def main():
             xml=args.xml,
             raw=args.raw,
             force=args.force,
+            enrich=args.enrich,
+            summary=args.summary,
         )
         sys.exit(exit_code)
     elif args.command == "add":

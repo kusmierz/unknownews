@@ -126,3 +126,25 @@ Dla URL: https://philna.sh/blog/2026/01/11/javascript-date-calculation/
   "suggested_category": null
 }
 ```
+
+Dla URL: https://poledialogu.org.pl/wp-content/uploads/2026/01/Sadura-et-al.-2025-Wiem-ze-to-manipulacja-ale-i-tak-sie-denerwuje-Polacy-w-epoce-dezinformacji.-Raport-z-badan-i-re.pdf
+```json
+{
+  "title": "'Wiem, że to manipulacja, ale i tak się denerwuję' - raport (PDF, 101 stron)",
+  "description": "Raport opiera się na badaniu przeprowadzonym na niemal 1400 respondentach i przedstawia ciekawe wnioski dotyczące dezinformacji. Szacuje się, że około 84% Polaków zetknęło się z tym zjawiskiem w ciągu ostatniego roku, a niemal każdy z badanych uwierzył w co najmniej jedną fałszywą wiadomość. Zaufanie do mediów w naszym kraju spadło też do jednego z najniższych poziomów w całej Europie. Ciekawe jest to, że Polacy całkiem dobrze radzą sobie z rozpoznawaniem manipulacji podczas testów, ale zupełnie nie przekłada się to na kontakt z manipulacją w życiu codziennym. Sama świadomość manipulacji również nie przekłada się na praktykę. Pomimo tego, że ludzie wiedzą, że mogą być manipulowani, fake newsy i tak mogą wpłynąć na zmianę ich poglądów. Interesujący raport, wart przemyślenia.",
+  "tags": ["disinformation", "prebunking", "debunking", "climate policy", "ets2", "media literacy"],
+  "category": "Science & Society",
+  "suggested_category": null
+}
+```
+
+Dla URL: https://newsletter.techworld-with-milan.com/p/you-can-code-only-4-hours-per-day
+```json
+{
+  "title": "Dlaczego powinieneś programować tylko przez 4 godziny dziennie?",
+  "description": "Jeśli jesteś programistą i chcesz programować przez osiem godzin w ramach pracy na etacie, to może to być niezwykle trudne do wykonania. Większość z nas już po kilku godzinach intensywnego kodowania czuje, że mózg zaczyna odmawiać posłuszeństwa. Autor artykułu sugeruje, że 3–4 godziny takiego głębokiego, skoncentrowanego programowania to maksimum, jakie człowiek jest w stanie osiągnąć. Podobno potwierdzają to badania psychologiczne. W artykule znajdziesz również kilka porad, które według autora mogą zwiększyć produktywność nawet pięciokrotnie.",
+  "tags": ["deep work", "developer productivity", "meetings", "flow", "interruptions"],
+  "category": "Work & Career",
+  "suggested_category": null
+}
+```
