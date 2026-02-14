@@ -19,7 +19,7 @@ from .display import console
 CONTENT_MAX_CHARS = 64_000
 
 
-def fetch_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
+def fetch_content(url: str, verbose: int = 0, force: bool = False) -> Optional[Dict[str, Any]]:
     """
     Orchestrate content fetching based on URL type.
 
@@ -51,7 +51,7 @@ def fetch_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
     try:
         # Detect content type
         if is_video_url(url):
-            video_data = fetch_video_content(url, verbose=verbose)
+            video_data = fetch_video_content(url, verbose=verbose, force=force)
             if not video_data:
                 return None
 
@@ -101,12 +101,12 @@ def fetch_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
                     console.print(f"  [dim]⚠ Non-HTML content ({head['content_type']})[/dim]")
                 return {"_skip_fallback": True, "_reason": f"Non-HTML: {head['content_type']}"}
 
-            article_data = fetch_article_content(url, verbose=verbose)
+            article_data = fetch_article_content(url, verbose=verbose, force=force)
 
             if not article_data:
                 if verbose >= 1:
                     console.print("  [dim]⚠ Trafilatura failed, trying Playwright…[/dim]")
-                article_data = fetch_article_with_playwright(url, verbose=verbose)
+                article_data = fetch_article_with_playwright(url, verbose=verbose, force=force)
 
             if not article_data:
                 return None

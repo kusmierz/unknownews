@@ -166,7 +166,7 @@ def _extract_page_content(page) -> str:
     return html
 
 
-def fetch_article_with_playwright(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
+def fetch_article_with_playwright(url: str, verbose: int = 0, force: bool = False) -> Optional[Dict[str, Any]]:
     """Fetch article content using a headless Chromium browser via Playwright.
 
     Handles JS-rendered pages and Cloudflare-protected sites that trafilatura cannot access.
@@ -175,11 +175,12 @@ def fetch_article_with_playwright(url: str, verbose: int = 0) -> Optional[Dict[s
     Returns same dict shape as fetch_article_content(), or None on failure.
     """
     # Check cache first (shared with trafilatura)
-    cached = article_cache.get_cached(url)
-    if cached is not None and cached.get("text_content"):
-        if verbose:
-            console.print("[dim]  Using cached article content[/dim]")
-        return cached
+    if not force:
+        cached = article_cache.get_cached(url)
+        if cached is not None and cached.get("text_content"):
+            if verbose:
+                console.print("[dim]  Using cached article content[/dim]")
+            return cached
 
     try:
         from playwright.sync_api import sync_playwright
@@ -247,7 +248,7 @@ def fetch_article_with_playwright(url: str, verbose: int = 0) -> Optional[Dict[s
         return None
 
 
-def fetch_article_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
+def fetch_article_content(url: str, verbose: int = 0, force: bool = False) -> Optional[Dict[str, Any]]:
     """
     Fetch article content using trafilatura.
 
@@ -268,11 +269,12 @@ def fetch_article_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]
         }
     """
     # Check cache first
-    cached = article_cache.get_cached(url)
-    if cached is not None:
-        if verbose:
-            console.print("[dim]  Using cached article content[/dim]")
-        return cached
+    if not force:
+        cached = article_cache.get_cached(url)
+        if cached is not None:
+            if verbose:
+                console.print("[dim]  Using cached article content[/dim]")
+            return cached
 
     try:
         # Download content

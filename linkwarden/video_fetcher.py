@@ -92,7 +92,7 @@ def extract_transcript_from_info(info_dict: Dict, verbose: int = 0) -> Optional[
         return None
 
 
-def fetch_video_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
+def fetch_video_content(url: str, verbose: int = 0, force: bool = False) -> Optional[Dict[str, Any]]:
     """
     Fetch video metadata and transcript using yt-dlp.
 
@@ -125,7 +125,7 @@ def fetch_video_content(url: str, verbose: int = 0) -> Optional[Dict[str, Any]]:
     """
     try:
         # Check cache first
-        cached_data = yt_dlp_cache.get_cached(url)
+        cached_data = None if force else yt_dlp_cache.get_cached(url)
         if cached_data:
             console.print("[dim]  ℹ Using cached video info[/dim]")
             # Use cached transcript if available
