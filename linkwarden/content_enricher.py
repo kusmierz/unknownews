@@ -66,6 +66,11 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0, link
     if verbose >= 1:
         console.print(f"  [dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
 
+    # For documents (PDFs), attach the file URL for multimodal Responses API
+    file_url = None
+    if content_data.get("content_type") == "document":
+        file_url = content_data.get("url")
+
     if hasattr(status, "update"):
         status.update("  Calling LLM...")
-    return enrich_content(url, formatted_content, original_title=content_data.get("title") or "", prompt_path=prompt_path, verbose=verbose)
+    return enrich_content(url, formatted_content, original_title=content_data.get("title") or "", prompt_path=prompt_path, verbose=verbose, file_url=file_url)

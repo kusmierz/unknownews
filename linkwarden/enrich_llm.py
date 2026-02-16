@@ -121,7 +121,7 @@ def needs_enrichment(link: dict, force: bool = False) -> dict:
     }
 
 
-def enrich_content(url: str, formatted_content: str, original_title: str = "", prompt_path: str | None = None, verbose: int = 0) -> dict | None:
+def enrich_content(url: str, formatted_content: str, original_title: str = "", prompt_path: str | None = None, verbose: int = 0, file_url: str | None = None) -> dict | None:
     """Call LLM to enrich a URL given pre-formatted content.
 
     Uses OpenAI-compatible API. Configure via environment variables:
@@ -152,7 +152,7 @@ def enrich_content(url: str, formatted_content: str, original_title: str = "", p
         return None
 
     # Call API
-    response_text = call_api(formatted_content, prompt_template, verbose=verbose)
+    response_text = call_api(formatted_content, prompt_template, verbose=verbose, file_url=file_url)
 
     if not response_text:
         console.print("[yellow]  Empty response from API[/yellow]")
