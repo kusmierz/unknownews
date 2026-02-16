@@ -4,6 +4,7 @@ from .api import (
     create_link,
     delete_link,
     fetch_collection_links,
+    iter_collection_links,
     update_link,
 )
 from .collections_cache import get_collections
@@ -16,12 +17,14 @@ __all__ = [
     "delete_link",
     "fetch_all_links",
     "fetch_collection_links",
+    "iter_all_links",
+    "iter_collection_links",
     "update_link",
 ]
 
 
-def fetch_all_links(silent: bool = False) -> list[dict]:
-    """Fetch all links from all collections.
+def iter_all_links(silent: bool = False):
+    """Yield links from all collections (generator).
 
     Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
 
@@ -30,19 +33,29 @@ def fetch_all_links(silent: bool = False) -> list[dict]:
     """
     base_url, _ = get_api_config()
     collections = get_collections()
-    all_links = []
 
     for collection in collections:
         collection_id = collection["id"]
         collection_name = collection.get("name", f"Collection {collection_id}")
-        collection_url = f"{base_url}/collections/{collection_id}"
-        links = fetch_collection_links(collection_id)
-        for link in links:
+        count = 0
+        for link in iter_collection_links(collection_id):
             link["_collection_name"] = collection_name
-        all_links.extend(links)
+            count += 1
+            yield link
         if not silent:
-            console.print(f"  [dim][link={collection_url}]{collection_name}[/link][/dim] [green]{len(links)}[/green]")
+            collection_url = f"{base_url}/collections/{collection_id}"
+            console.print(f"  [dim][link={collection_url}]{collection_name}[/link][/dim] [green]{count}[/green]")
 
-    console.print("")
+    if not silent:
+        console.print("")
 
-    return all_links
+
+def fetch_all_links(silent: bool = False) -> list[dict]:
+    """Fetch all links from all collections.
+
+    Convenience wrapper around iter_all_links() that returns a list.
+
+    Args:
+        silent: If True, don't print progress messages
+    """
+    return list(iter_all_links(silent=silent))

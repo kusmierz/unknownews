@@ -2,7 +2,7 @@
 
 import html
 
-from ..links import fetch_collection_links, fetch_all_links, update_link
+from ..links import iter_collection_links, iter_all_links, update_link
 from ..collections_cache import get_collections
 from ..config import get_api_config
 from ..content_enricher import enrich_link, RateLimitError
@@ -325,19 +325,16 @@ def enrich_links(
         with console.status("Loading newsletter index...", spinner="dots"):
             newsletter_index, newsletter_fuzzy_index = load_newsletter_index()
 
-    # Fetch links
-    with console.status("Fetching links...", spinner="dots"):
-        if collection_id is not None:
-            links = fetch_collection_links(collection_id)
-        else:
-            links = fetch_all_links(silent=not dry_run)
+    # Fetch links (generator — no upfront load)
+    if collection_id is not None:
+        links = iter_collection_links(collection_id)
+    else:
+        links = iter_all_links(silent=True)
 
-    console.print(f"[bold]{len(links)}[/bold] links total", end="")
     if use_newsletter:
-        console.print(f", [bold]{len(newsletter_index)}[/bold] indexed")
+        console.print(f"[bold]{len(newsletter_index)}[/bold] newsletter entries indexed\n")
     else:
         console.print()
-    console.print()
 
     # Process links
     dry_label = "[dim](dry-run)[/dim] " if dry_run else ""
@@ -346,9 +343,11 @@ def enrich_links(
     failed = 0
     failed_links = []  # list of (link_id, url, reason)
     processed = 0
+    total_seen = 0
     unmatched_urls = []
 
     for link in links:
+        total_seen += 1
         if 0 < limit <= processed:
             console.print(f"\n[dim]Limit of {limit} reached.[/dim]")
             break
@@ -420,7 +419,7 @@ def enrich_links(
     if failed:
         parts.append(f"[red]{failed} failed[/red]")
 
-    console.print(f"\n{dry_label}{', '.join(parts)}")
+    console.print(f"\n{dry_label}[bold]{total_seen}[/bold] links scanned, {', '.join(parts)}")
 
     if failed_links:
         console.print(f"\n[red]Failed ({len(failed_links)}):[/red]")

@@ -50,8 +50,8 @@ def fetch_all_collections() -> list[dict]:
     return result
 
 
-def fetch_collection_links(collection_id: int) -> list[dict]:
-    """Fetch all links from a Linkwarden collection using search API with pagination.
+def iter_collection_links(collection_id: int):
+    """Yield links from a collection page by page (generator).
 
     Automatically reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment.
 
@@ -60,7 +60,6 @@ def fetch_collection_links(collection_id: int) -> list[dict]:
     """
     base_url, token = get_api_config()
     headers = {"Authorization": f"Bearer {token}"}
-    all_links = []
     cursor = None
 
     while True:
@@ -79,7 +78,7 @@ def fetch_collection_links(collection_id: int) -> list[dict]:
         if not links:
             break
 
-        all_links.extend(links)
+        yield from links
 
         # Use nextCursor for pagination
         next_cursor = data.get("nextCursor")
@@ -87,7 +86,16 @@ def fetch_collection_links(collection_id: int) -> list[dict]:
             break
         cursor = next_cursor
 
-    return all_links
+
+def fetch_collection_links(collection_id: int) -> list[dict]:
+    """Fetch all links from a Linkwarden collection using search API with pagination.
+
+    Convenience wrapper around iter_collection_links() that returns a list.
+
+    Args:
+        collection_id: Collection ID to fetch links from
+    """
+    return list(iter_collection_links(collection_id))
 
 
 
