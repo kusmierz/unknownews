@@ -6,11 +6,16 @@ Converts PDF, DOCX, PPTX, XLSX, XLS documents to markdown text.
 
 from typing import Optional, Dict, Any
 
+import logging
+
 from markitdown import MarkItDown
 
 from .fetcher_utils import truncate_content
 from .display import console
 from . import article_cache
+
+# Suppress noisy pdfminer warnings (e.g. "Could not get FontBBox from font descriptor")
+logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 DOCUMENT_MAX_CHARS = 64_000
 
@@ -53,7 +58,7 @@ def fetch_document_content(url: str, doc_type: str, verbose: int = 0) -> Optiona
         original_length = len(text)
         text, was_truncated = truncate_content(text, DOCUMENT_MAX_CHARS)
 
-        if was_truncated:
+        if was_truncated and verbose:
             console.print(f"[dim]  ℹ Content truncated: {original_length:,} → {len(text):,} chars[/dim]")
 
         if verbose:

@@ -117,7 +117,7 @@ def extract_article_from_html(html: str, fallback_title: str = "", verbose: int 
         original_length = len(text)
         text, was_truncated = truncate_content(text, ARTICLE_MAX_CHARS)
 
-        if was_truncated:
+        if was_truncated and verbose:
             console.print(f"[dim]  ℹ Content truncated: {original_length:,} → {len(text):,} chars[/dim]")
 
         if verbose:

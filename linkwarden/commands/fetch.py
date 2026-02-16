@@ -177,7 +177,8 @@ def _show_enrich(url: str, verbose: int = 0) -> None:
     except FileNotFoundError:
         pass
 
-    console.print("\n[dim]Running LLM enrichment...[/dim]")
+    if verbose >= 1:
+        console.print("\n[dim]Running LLM enrichment...[/dim]")
     enriched = enrich_link(url, verbose=verbose)
     if not enriched or enriched.get("_skipped"):
         console.print("[red]Enrichment failed[/red]")

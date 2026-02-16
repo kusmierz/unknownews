@@ -55,7 +55,8 @@ def summarize_content(content_data: dict, verbose: int = 0) -> str | None:
         return None
 
     prompt = load_prompt(PROMPT_PATH)
-    console.print("\n[dim]Generating summary...[/dim]")
+    if verbose >= 1:
+        console.print("\n[dim]Generating summary...[/dim]")
     response = call_api(formatted, prompt, verbose=verbose >= 2)
 
     if response and url:

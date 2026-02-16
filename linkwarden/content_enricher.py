@@ -63,7 +63,8 @@ def enrich_link(url: str, prompt_path: str | None = None, verbose: int = 0, link
         return {"_skipped": True, "_reason": "No content extracted"}
 
     formatted_content = format_content_for_llm(content_data)
-    console.print(f"  [dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
+    if verbose >= 1:
+        console.print(f"  [dim]✓ Content fetched via {content_data['fetch_method']}[/dim]")
 
     if hasattr(status, "update"):
         status.update("  Calling LLM...")
