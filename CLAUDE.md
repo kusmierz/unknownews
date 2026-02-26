@@ -16,11 +16,21 @@ Python scraper and crawler for unknownews newsletter (mrugalski.pl). Extracts st
 source .venv/bin/activate        # activate virtualenv
 pip install -r requirements.txt  # install deps
 
-# Crawl newsletters (with daily caching)
-python scraper.py [-n LIMIT] [-f]                 # fetch latest (default: max 10, cached daily)
+# Crawl newsletters (with 3-hour caching)
+python scraper.py [-n LIMIT] [-f]                 # fetch latest (default: max 10, cached 3h)
 python scraper.py -n 50                           # fetch up to 50 newsletters
-python scraper.py --force                         # bypass daily cache
+python scraper.py --force                         # bypass 3-hour cache
 python scraper.py <url> -n 20                     # start from specific URL
+
+# Fetch and display content for a URL
+python linkwarden.py fetch <url>                  # render content as markdown
+python linkwarden.py fetch <url> --raw            # raw text only
+python linkwarden.py fetch <url> --force          # bypass cache, re-fetch
+python linkwarden.py fetch <url> --enrich         # show LLM enrichment (runs if not cached)
+python linkwarden.py fetch <url> --summary        # generate LLM summary
+python linkwarden.py fetch <url> --json           # output as JSON
+python linkwarden.py fetch <url> --enrich --summary  # enrichment + summary
+python linkwarden.py fetch <url> -v               # fetch details
 
 # Add URL to Linkwarden (with newsletter or LLM enrichment)
 python linkwarden.py add <url>                    # add to Uncategorized (with warning)
@@ -71,8 +81,8 @@ Helper functions:
 - `get_premium_url(url)` - converts to premium URL using password
 
 Caching:
-- Uses `data/last-fetch_cache.txt` to track last fetch date
-- Only fetches once per day (bypass with `--force`)
+- Uses `cache/last-fetch.txt` to track last fetch time
+- Only fetches once per 3 hours (bypass with `--force`)
 
 ### linkwarden.py (main CLI)
 Entry point for Linkwarden tools. Parses command-line arguments and dispatches to command implementations.
@@ -114,24 +124,34 @@ Modular Linkwarden tools for enriching links and managing duplicates. Uses `rich
   - `is_video_url(url)` - URL-based video platform detection
   - Exceptions: `ContentFetchError`, `RateLimitError`
 - `content_fetcher.py` - Content fetching orchestrator (re-exports `RateLimitError` for backward compat)
-  - `fetch_content(url)` - orchestrates content fetching based on URL type
+  - `fetch_content(url)` - orchestrates content fetching based on URL type (article, video, document, playwright fallback)
   - `format_content_for_llm(content_data)` - formats fetch_content() output as XML for LLM
+- `content_enricher.py` - Content fetching + LLM enrichment orchestration
+  - `enrich_link(url, prompt_path, verbose, link, status)` - cache check → fetch → enrich (with Linkwarden fallback)
 - `article_fetcher.py` - Article content fetching (cached 7 days)
-  - `fetch_article_content(url)` - uses trafilatura to extract article content
+  - `fetch_article_content(url)` - uses trafilatura to extract article content; falls back to Playwright on failure
+- `document_fetcher.py` - Document content fetching (PDF, DOCX, PPTX, XLSX via markitdown, cached 7 days)
+  - `fetch_document_content(url, doc_type)` - converts document to markdown
 - `video_fetcher.py` - Video content fetching
   - `fetch_video_content(url)` - uses yt-dlp for metadata + youtube-transcript-api for transcripts (cached 7 days)
   - `extract_transcript_from_info(info_dict)` - extracts transcript via youtube-transcript-api (languages: original → en → pl)
   - **Optimization**: Caches only essential data + transcript (~10 KB per video)
 - `llm.py` - Generic OpenAI-compatible API client
-  - `call_api(user_prompt, system_prompt, max_retries, verbose)` - orchestrator with retry + verbose display
-  - `call_responses_api(...)` - OpenAI Responses API with web search
+  - `call_api(user_prompt, system_prompt, max_retries, verbose, file_url, json_mode)` - orchestrator with retry + verbose display
+  - `call_responses_api(...)` - OpenAI Responses API with web search (supports `file_url` attachment)
   - `call_chat_completions_api(...)` - standard Chat Completions API
-- `enrich_llm.py` - Enrichment-specific LLM orchestration
-  - `enrich_link(url, prompt_path, verbose)` - cache check → fetch content → format → call LLM → parse → cache save
+- `enrich_llm.py` - Low-level LLM enrichment utilities
+  - `enrich_content(url, formatted_content, original_title, prompt_path, verbose, file_url)` - calls LLM and caches result
   - `load_prompt(prompt_path)` - loads prompt template file
   - `parse_json_response(text)` - parses JSON from LLM response, decodes HTML entities
+  - `needs_enrichment(link, force)` - checks which fields need enrichment
+- `summary_llm.py` - Summary-specific LLM orchestration
+  - `summarize_url(url, verbose, force)` - standalone entry point: cache check → fetch → summarize
+  - `summarize_content(content_data, verbose)` - generate summary from pre-fetched content data
 - `llm_cache.py` - Thin wrapper around unified cache for LLM results (no expiry)
   - `get_cached(url)` / `set_cached(url, result)` / `remove_cached(url)`
+- `summary_cache.py` - Thin wrapper around unified cache for LLM summaries (30-day TTL)
+  - `get_cached(url)` / `set_cached(url, summary)` / `remove_cached(url)`
 - `article_cache.py` - Thin wrapper around unified cache for article content (7-day TTL)
   - `get_cached(url)` / `set_cached(url, data)`
 - `yt_dlp_cache.py` - Thin wrapper around unified cache for yt-dlp video info (7-day TTL)
@@ -146,6 +166,7 @@ Modular Linkwarden tools for enriching links and managing duplicates. Uses `rich
 
 **Commands** (in `linkwarden/commands/`) - all self-sustainable, read credentials from environment:
 - `add.py` - `add_link(url, collection_id, dry_run, unread, silent)` - adds URL with enrichment
+- `fetch.py` - `fetch_url(url, verbose, raw, force, enrich, summary, json_output)` - fetch and display URL content
 - `list_links.py` - `list_links(collection_id)` - lists all links grouped by collection
 - `remove_duplicates.py` - `remove_duplicates(dry_run)` - finds and removes duplicates
 - `enrich.py` - `enrich_links(...)` - newsletter + LLM enrichment (merged sync+enrich)
@@ -156,11 +177,12 @@ Modular Linkwarden tools for enriching links and managing duplicates. Uses `rich
 data/
   newsletters.jsonl       # one JSON per line (scraped newsletters)
   scraped_urls.txt        # for deduplication across runs
-  last-fetch_cache.txt    # daily cache timestamp (YYYY-MM-DD)
 
 cache/                    # unified cache directory (managed by cache.py)
+  last-fetch.txt          # 3-hour fetch cache timestamp (ISO datetime)
   article.json            # cached article content (per URL, 7-day TTL)
   llm.json                # cached LLM enrichment results (per URL, no expiry)
+  summary.json            # cached LLM summaries (per URL, 30-day TTL)
   yt_dlp.json             # cached yt-dlp video info (per URL, 7-day TTL, ~12 KB per video)
   collections.json        # cached collections list (1-day TTL)
 ```
@@ -197,6 +219,7 @@ cache/                    # unified cache directory (managed by cache.py)
 - `OPENAI_BASE_URL` - Base URL (optional, for Groq/other OpenAI-compatible providers)
 - `OPENAI_MODEL` - Model name (default: `gpt-4o-mini`)
 - `OPENAI_USE_RESPONSE_API` - Set to `1` to use Responses API with web search (OpenAI only)
+- `OPENAI_MODEL_TIER` - Optional service tier (e.g., `flex` for OpenAI Flex processing)
 
 ## Linkwarden API
 

@@ -29,14 +29,17 @@ pip install -r requirements.txt
 ### CLI
 
 ```bash
-# Crawl 10 newsletters (default)
-python scraper.py https://mrugalski.pl/nl/wu/u8d1L2kQOHGVezsjqUWH0g
+# Crawl latest 10 newsletters (auto-detects latest issue)
+python scraper.py
 
 # Crawl with custom limit
-python scraper.py https://mrugalski.pl/nl/wu/u8d1L2kQOHGVezsjqUWH0g -n 50
+python scraper.py -n 50
 
-# Resume crawling (automatically skips already scraped URLs)
-python scraper.py https://mrugalski.pl/nl/wu/u8d1L2kQOHGVezsjqUWH0g -n 200
+# Bypass 3-hour cache and re-fetch
+python scraper.py --force
+
+# Start from a specific newsletter URL
+python scraper.py https://mrugalski.pl/nl/wu/... -n 20
 ```
 
 ### Python API
@@ -111,7 +114,7 @@ jq 'select(.links[].title | test("AI"; "i"))' data/newsletters.jsonl
 
 ## Linkwarden Tools
 
-Tools for managing Linkwarden bookmarks: sync newsletter descriptions, enrich with LLM, and remove duplicates.
+Tools for managing Linkwarden bookmarks: fetch content, enrich with newsletter data and LLM, and remove duplicates.
 
 ### Setup
 
@@ -119,58 +122,72 @@ Add to `.env`:
 ```
 LINKWARDEN_TOKEN=your_token_here
 LINKWARDEN_URL=https://links.kusmierz.be
-OPENAI_API_KEY=sk-...              # for enrich command
+OPENAI_API_KEY=sk-...              # for enrich/fetch commands
 OPENAI_BASE_URL=                   # optional, for Groq/other providers
 OPENAI_MODEL=gpt-4o-mini           # optional, default: gpt-4o-mini
-OPENAI_USE_RESPONSE_API=1          # optional, enables Response API
+OPENAI_USE_RESPONSE_API=1          # optional, enables Responses API with web search
+OPENAI_MODEL_TIER=flex             # optional, service tier (e.g. flex)
 ```
 
 ### Commands
 
 ```bash
+# Fetch and display content for a URL
+python linkwarden.py fetch <url>                  # render as markdown
+python linkwarden.py fetch <url> --raw            # raw text only
+python linkwarden.py fetch <url> --force          # bypass cache, re-fetch
+python linkwarden.py fetch <url> --enrich         # show LLM enrichment data
+python linkwarden.py fetch <url> --summary        # generate LLM summary
+python linkwarden.py fetch <url> --json           # output as JSON
+
+# Add a URL to Linkwarden with enrichment
+python linkwarden.py add <url>
+python linkwarden.py add <url> --collection 14    # specific collection
+python linkwarden.py add <url> --dry-run          # preview without adding
+python linkwarden.py add <url> --unread           # add with "unread" tag
+
 # List links
 python linkwarden.py list                         # all collections
 python linkwarden.py list --collection 14         # specific collection
 
-# Sync newsletter descriptions
-python linkwarden.py sync --dry-run               # preview changes
-python linkwarden.py sync                         # sync all collections
-python linkwarden.py sync --collection 14         # specific collection
-python linkwarden.py sync --limit 10              # limit updates
-
-# Enrich links with LLM
+# Enrich links (newsletter data + LLM)
+python linkwarden.py enrich                       # enrich all collections
+python linkwarden.py enrich --newsletter-only     # newsletter data only (no LLM)
+python linkwarden.py enrich --llm-only            # LLM only (no newsletter matching)
 python linkwarden.py enrich --dry-run             # preview (caches results)
-python linkwarden.py enrich                       # enrich empty fields
 python linkwarden.py enrich --force               # regenerate all fields
 python linkwarden.py enrich --collection 14       # specific collection
-python linkwarden.py enrich --limit 5             # limit processed (including failures)
+python linkwarden.py enrich --limit 5             # limit processed links
+python linkwarden.py enrich --show-unmatched      # show URLs not in newsletter
 
 # Remove duplicates
 python linkwarden.py remove-duplicates --dry-run  # preview deletions
 python linkwarden.py remove-duplicates            # delete duplicates
 ```
 
-### Sync command
+### Fetch command
 
-Matches Linkwarden bookmarks to newsletter links and updates metadata:
+Fetches and renders content for any URL — articles, videos, PDFs, and documents:
 
-- **URL matching**: Exact match first, then fuzzy match (by domain+path, ignoring query params)
-- **URL normalization**: Removes tracking params (`utm_*`, `fbclid`, etc.) and fragments (`#`)
-- **Name update**: Sets link name to newsletter title with original in brackets
-- **Tags**: Adds "unknow" tag and date tag (e.g., "2024-12-20")
-- **Description**: Appends newsletter description to existing bookmark description
+- **Rendering**: Defaults to markdown display with title and metadata; `--raw` for plain text
+- **Content types**: Articles (trafilatura + Playwright fallback), videos (yt-dlp + transcripts), documents (PDF/DOCX/PPTX via markitdown)
+- **Enrichment**: `--enrich` runs LLM enrichment and shows title/description/tags/category
+- **Summary**: `--summary` generates an LLM summary of the content
+- **JSON output**: `--json` outputs structured data (url, content, summary, enrichment fields)
+- **Caching**: Content cached 7 days; summaries cached 30 days; `--force` bypasses cache
 
 ### Enrich command
 
-Uses LLM (OpenAI or compatible) to generate Polish titles, descriptions, and tags for bookmarks:
+Matches bookmarks to newsletter data and enriches with LLM (Polish titles, descriptions, tags):
 
 - **Empty detection**: Only enriches fields that are empty (title = domain, no description, no real tags)
+- **Newsletter matching**: Exact URL match first, then fuzzy match by domain+path
 - **Force mode**: `--force` regenerates all fields even if not empty
 - **Web search**: Set `OPENAI_USE_RESPONSE_API=1` to enable web search via OpenAI Responses API
-- **Caching**: LLM results are cached in `data/llm_cache.json` to save tokens
+- **Caching**: LLM results are cached in `cache/llm.json` to save tokens
   - Cache is used on subsequent runs (especially useful with `--dry-run`)
   - Cache entry is removed after successful Linkwarden update
   - Skipped results (LLM couldn't access content) are not cached
 - **Limit**: `--limit` counts all processed links (success + failures + skipped)
 - **System tags**: Preserves "unknow" and date tags (YYYY-MM-DD) when adding new tags
-- **Prompt**: Uses `prompts/enrich-link.md` template (customizable with `--prompt`)
+- **Prompt**: Uses `prompts/enrich-link.md` template
