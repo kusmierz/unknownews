@@ -12,7 +12,7 @@ from .display import console
 DEFAULT_MODEL = "gpt-4o-mini"
 
 
-def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: int = 1, verbose: int = 0, file_url: str | None = None) -> str | None:
+def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: int = 1, verbose: int = 0, file_url: str | None = None, json_mode: bool = True) -> str | None:
   api_key = os.environ.get("OPENAI_API_KEY")
   model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
   base_url = os.environ.get("OPENAI_BASE_URL")
@@ -79,7 +79,7 @@ def call_api(user_prompt: str, system_prompt: str | None = None, max_retries: in
       if use_responses_api:
         response_text = call_responses_api(client, model, user_prompt, system_prompt, service_tier=service_tier, file_url=file_url)
       else:
-        response_text = call_chat_completions_api(client, model, user_prompt, system_prompt, service_tier = service_tier)
+        response_text = call_chat_completions_api(client, model, user_prompt, system_prompt, service_tier=service_tier, json_mode=json_mode)
       return response_text
 
     except Exception as e:
@@ -141,7 +141,7 @@ def call_responses_api(client: OpenAI, model: str, user_prompt: str, system_prom
     return response_text
 
 
-def call_chat_completions_api(client: OpenAI, model: str, user_prompt: str, system_prompt: str | None = None, service_tier: str | None = None) -> str | None:
+def call_chat_completions_api(client: OpenAI, model: str, user_prompt: str, system_prompt: str | None = None, service_tier: str | None = None, json_mode: bool = True) -> str | None:
     """Call OpenAI Chat Completions API.
 
     Args:
@@ -161,11 +161,9 @@ def call_chat_completions_api(client: OpenAI, model: str, user_prompt: str, syst
 
     message_user_prompt: ChatCompletionUserMessageParam = {"role": "user", "content": user_prompt}
     messages.append(message_user_prompt)
-    response_format: ResponseFormatJSONObject = {"type": "json_object"}
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        response_format=response_format,
-        service_tier=service_tier,
-    )
+    kwargs = {"model": model, "messages": messages, "service_tier": service_tier}
+    if json_mode:
+        response_format: ResponseFormatJSONObject = {"type": "json_object"}
+        kwargs["response_format"] = response_format
+    response = client.chat.completions.create(**kwargs)
     return response.choices[0].message.content

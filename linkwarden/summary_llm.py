@@ -57,7 +57,7 @@ def summarize_content(content_data: dict, verbose: int = 0) -> str | None:
     prompt = load_prompt(PROMPT_PATH)
     if verbose >= 1:
         console.print("\n[dim]Generating summary...[/dim]")
-    response = call_api(formatted, prompt, verbose=verbose >= 2)
+    response = call_api(formatted, prompt, verbose=verbose >= 2, json_mode=False)
 
     if response and url:
         summary_cache.set_cached(url, response)
