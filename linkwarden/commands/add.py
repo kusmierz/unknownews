@@ -4,10 +4,174 @@ from contextlib import nullcontext
 
 from ..links import create_link
 from ..collections_cache import get_collections
-from ..display import console, get_tag_color
-from ..content_enricher import enrich_link
+from common.display import console, format_tags_display
+from ..lw_enricher import enrich_link
 from ..newsletter import load_newsletter_index
-from ..url_utils import normalize_url, get_url_path_key
+from ..tag_utils import build_newsletter_tags
+from enricher.title_utils import format_enriched_title
+from common.url_utils import normalize_url, get_url_path_key
+
+
+def _lookup_newsletter(url, normalized_url):
+    """Look up URL in newsletter index.
+
+    Returns:
+        Tuple of (newsletter_data, match_type, matched_url) or (None, None, None)
+    """
+    exact_index = {}
+    fuzzy_index = {}
+
+    try:
+        exact_index, fuzzy_index = load_newsletter_index()
+    except Exception:
+        return None, None, None
+
+    if normalized_url in exact_index:
+        nl_data = exact_index[normalized_url]
+        return nl_data, "exact", nl_data.get("original_url", normalized_url)
+
+    path_key = get_url_path_key(url)
+    if path_key and path_key in fuzzy_index:
+        nl_data = fuzzy_index[path_key]
+        return nl_data, "fuzzy", nl_data.get("original_url", "")
+
+    return None, None, None
+
+
+def _enrich_with_sources(normalized_url, newsletter_data, match_type, show_output, verbose):
+    """Enrich URL using newsletter data and/or LLM.
+
+    Returns:
+        Tuple of (title, description, tags, category, source) or None on failure
+    """
+    if newsletter_data:
+        title = newsletter_data.get("title", "")
+        description = newsletter_data.get("description", "")
+        tags = build_newsletter_tags(newsletter_data)
+        source = f"newsletter ({match_type})"
+
+        status = console.status("Enriching with LLM...", spinner="dots") if show_output else nullcontext()
+        with status:
+            llm_result = enrich_link(normalized_url, verbose=verbose, status=status)
+
+        if llm_result and not llm_result.get("_skipped"):
+            llm_tags = llm_result.get("tags", [])
+            if llm_tags:
+                tags.extend(llm_tags)
+            category = llm_result.get("category", "")
+            source = f"newsletter ({match_type}) + LLM"
+        else:
+            category = None
+
+        return title, description, tags, category, source
+
+    # LLM-only enrichment
+    status = console.status("  Enriching link...", spinner="dots") if show_output else nullcontext()
+    with status:
+        result = enrich_link(normalized_url, verbose=verbose, status=status)
+
+    if not result:
+        return None
+    if result.get("_skipped"):
+        return None
+
+    title = format_enriched_title(result.get("title", ""), result.get("_original_title", ""))
+    description = result.get("description", "")
+    tags = result.get("tags", [])
+    category = result.get("category", "")
+    return title, description, tags, category, "LLM"
+
+
+def _resolve_collection(category, collection_id, show_output):
+    """Map LLM category to collection ID."""
+    if not category:
+        return collection_id
+
+    try:
+        collections = get_collections()
+        for coll in collections:
+            coll_name = coll.get("name", "").strip()
+            if coll_name.lower() == category.lower():
+                return coll["id"]
+    except Exception as e:
+        if show_output:
+            console.print(f"[yellow]Warning: Could not fetch collections: {e}[/yellow]")
+
+    return collection_id
+
+
+def _display_result(normalized_url, title, description, tags, category, source, match_type, matched_url):
+    """Display enrichment results."""
+    console.print(f"[bold]linkwarden add[/bold]\n")
+    console.print(f"URL: [link={normalized_url}]{normalized_url}[/link]")
+    console.print(f"Source: {source}")
+
+    if match_type == "fuzzy" and matched_url and matched_url != normalized_url:
+        console.print(f"Matched: [dim]{matched_url}[/dim]")
+
+    console.print()
+
+    if title:
+        console.print(f"[green]+ title:[/green] {title}")
+    if description:
+        desc_lines = description.split("\n")
+        console.print(f"[green]+ desc:[/green] {desc_lines[0]}")
+        for line in desc_lines[1:]:
+            console.print(f"  {line}")
+    if tags:
+        console.print(f"[green]+ tags:[/green] {format_tags_display(tags)}")
+    if category:
+        console.print(f"[green]+ category:[/green] {category}")
+
+    console.print()
+
+
+def _create_and_save(normalized_url, title, description, tags, collection_id, dry_run, show_output):
+    """Create link in Linkwarden or show dry-run preview.
+
+    Returns:
+        Exit code (0 = success, 1 = error)
+    """
+    is_uncategorized = collection_id == 1
+
+    if show_output:
+        collection_name = f"#{collection_id}"
+        try:
+            collections = get_collections()
+            for coll in collections:
+                if coll["id"] == collection_id:
+                    collection_name = f"{coll.get('name', '')} (#{collection_id})"
+                    break
+        except Exception:
+            pass
+
+    if dry_run:
+        if show_output:
+            if is_uncategorized:
+                console.print(f"[yellow](dry-run) Would add to Uncategorized (#{collection_id})[/yellow]")
+            else:
+                console.print(f"[dim](dry-run) Would add to collection: {collection_name}[/dim]")
+        return 0
+
+    if show_output and is_uncategorized:
+        console.print(f"[yellow]\u26a0 Adding to Uncategorized (#{collection_id})[/yellow]")
+
+    try:
+        create_link(
+            url=normalized_url,
+            name=title,
+            description=description,
+            tags=tags,
+            collection_id=collection_id,
+        )
+        if show_output:
+            console.print("[green]Added![/green]")
+        return 0
+    except Exception as e:
+        if show_output:
+            console.print(f"[red]Error: Failed to create link: {e}[/red]")
+        return 1
+
 
 def add_link(
     url: str,
@@ -19,201 +183,39 @@ def add_link(
 ) -> int:
     """Add a URL to Linkwarden with enrichment from newsletter or LLM.
 
-    Args:
-        url: URL to add
-        collection_id: Target collection ID
-        dry_run: If True, preview without adding
-        unread: If True, add "unread" tag
-        silent: If True, no output (ignored with dry_run)
-        verbose: Verbosity level (0=quiet, 1=details, 2=LLM prompts)
-
     Returns:
         Exit code (0 = success, 1 = error)
     """
-    # In dry-run mode, always show output
     show_output = not silent or dry_run
 
-    # Normalize input URL
     normalized_url = normalize_url(url)
     if not normalized_url:
         if show_output:
             console.print("[red]Error: Invalid URL[/red]")
         return 1
 
-    # Load newsletter index
-    exact_index = {}
-    fuzzy_index = {}
+    # Look up newsletter
+    newsletter_data, match_type, matched_url = _lookup_newsletter(url, normalized_url)
 
-    try:
-        exact_index, fuzzy_index = load_newsletter_index()
-    except Exception as e:
+    # Enrich
+    enrichment = _enrich_with_sources(normalized_url, newsletter_data, match_type, show_output, verbose)
+    if enrichment is None:
         if show_output:
-            console.print(f"[yellow]Warning: Could not load newsletter index: {e}[/yellow]")
+            console.print("[red]Error: Failed to enrich link[/red]")
+        return 1
 
-    # Try to find in newsletter
-    newsletter_data = None
-    match_type = None
-    matched_url = None
+    title, description, tags, category, source = enrichment
 
-    # Try exact match first
-    if normalized_url in exact_index:
-        newsletter_data = exact_index[normalized_url]
-        match_type = "exact"
-        matched_url = newsletter_data.get("original_url", normalized_url)
-    else:
-        # Try fuzzy match
-        path_key = get_url_path_key(url)
-        if path_key and path_key in fuzzy_index:
-            newsletter_data = fuzzy_index[path_key]
-            match_type = "fuzzy"
-            matched_url = newsletter_data.get("original_url", "")
-
-    # Prepare link data
-    title = ""
-    description = ""
-    tags = []
-    category = None
-
-    if newsletter_data:
-        # Use newsletter data
-        title = newsletter_data.get("title", "")
-        description = newsletter_data.get("description", "")
-        date = newsletter_data.get("date", "")
-        tags = ["unknow"]
-        if date:
-            tags.append(date)
-        source = f"newsletter ({match_type})"
-
-        # Also call LLM to get category and real tags
-        status = console.status("Enriching with LLM...", spinner="dots") if show_output else nullcontext()
-        with status:
-            llm_result = enrich_link(normalized_url, verbose=verbose, status=status)
-
-        if llm_result and not llm_result.get("_skipped"):
-            llm_tags = llm_result.get("tags", [])
-            if llm_tags:
-                tags.extend(llm_tags)
-            category = llm_result.get("category", "")
-            source = f"newsletter ({match_type}) + LLM"
-    else:
-        # Use LLM enrichment
-        status = console.status("  Enriching link...", spinner="dots") if show_output else nullcontext()
-        with status:
-            result = enrich_link(normalized_url, verbose=verbose, status=status)
-
-        if not result:
-            if show_output:
-                console.print("[red]Error: Failed to enrich link with LLM[/red]")
-            return 1
-
-        if result.get("_skipped"):
-            if show_output:
-                console.print(f"[red]Error: LLM couldn't access content: {result.get('_reason', 'unknown')}[/red]")
-            return 1
-
-        llm_title = result.get("title", "")
-        org_title = result.get("_original_title", "")
-        if llm_title and org_title and llm_title != org_title:
-            title = f"{llm_title} [{org_title}]"
-        else:
-            title = llm_title
-        description = result.get("description", "")
-        tags = result.get("tags", [])
-        category = result.get("category", "")
-        source = "LLM"
-
-    # Add unread tag if requested
+    # Add unread tag
     if unread and "unread" not in tags:
         tags.append("unread")
 
-    # Match category to collection (if we have a category from LLM)
-    original_collection_id = collection_id
-    if category:
-        try:
-            collections = get_collections()
+    # Resolve collection from category
+    collection_id = _resolve_collection(category, collection_id, show_output)
 
-            # Try exact match first
-            for coll in collections:
-                coll_name = coll.get("name", "").strip()
-                if coll_name.lower() == category.lower():
-                    collection_id = coll["id"]
-                    break
-        except Exception as e:
-            collection_id = original_collection_id
-            if show_output:
-                console.print(f"[yellow]Warning: Could not fetch collections: {e}[/yellow]")
-
-    # Display results
+    # Display
     if show_output:
-        console.print(f"[bold]linkwarden add[/bold]\n")
-        console.print(f"URL: [link={normalized_url}]{normalized_url}[/link]")
-        console.print(f"Source: {source}")
+        _display_result(normalized_url, title, description, tags, category, source, match_type, matched_url)
 
-        # Show matched URL for fuzzy matches
-        if match_type == "fuzzy" and matched_url and matched_url != normalized_url:
-            console.print(f"Matched: [dim]{matched_url}[/dim]")
-
-        console.print()
-
-        # Show enrichment data
-        if title:
-            console.print(f"[green]+ title:[/green] {title}")
-        if description:
-            # Show full description, handling multiline
-            desc_lines = description.split("\n")
-            console.print(f"[green]+ desc:[/green] {desc_lines[0]}")
-            for line in desc_lines[1:]:
-                console.print(f"  {line}")
-        if tags:
-            tags_display = ", ".join(
-                f"[{get_tag_color(t)}]{t}[/{get_tag_color(t)}]" for t in tags
-            )
-            console.print(f"[green]+ tags:[/green] {tags_display}")
-        if category:
-            console.print(f"[green]+ category:[/green] {category}")
-
-        console.print()
-
-    # Get collection name for display
-    collection_name = f"#{collection_id}"
-    is_uncategorized = collection_id == 1
-
-    if show_output:
-        try:
-            collections = get_collections()
-            for coll in collections:
-                if coll["id"] == collection_id:
-                    collection_name = f"{coll.get('name', '')} (#{collection_id})"
-                    break
-        except Exception:
-            pass
-
-    # Handle dry-run
-    if dry_run:
-        if show_output:
-            if is_uncategorized:
-                console.print(f"[yellow](dry-run) Would add to Uncategorized (#{collection_id})[/yellow]")
-            else:
-                console.print(f"[dim](dry-run) Would add to collection: {collection_name}[/dim]")
-        return 0
-
-    # Show warning for uncategorized
-    if show_output and is_uncategorized:
-        console.print(f"[yellow]\u26a0 Adding to Uncategorized (#{collection_id})[/yellow]")
-
-    # Create link in Linkwarden
-    try:
-        create_link(
-          url=normalized_url,
-          name=title,
-          description=description,
-          tags=tags,
-          collection_id=collection_id,
-        )
-        if show_output:
-            console.print("[green]Added![/green]")
-        return 0
-    except Exception as e:
-        if show_output:
-            console.print(f"[red]Error: Failed to create link: {e}[/red]")
-        return 1
+    # Save
+    return _create_and_save(normalized_url, title, description, tags, collection_id, dry_run, show_output)

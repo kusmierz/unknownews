@@ -9,7 +9,7 @@ from .api import (
 )
 from .collections_cache import get_collections
 from .config import get_api_config
-from .display import console
+from common.display import console
 
 # Re-export API functions so commands import everything from here
 __all__ = [

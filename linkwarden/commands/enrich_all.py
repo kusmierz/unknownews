@@ -5,12 +5,12 @@ import html
 from ..links import iter_collection_links, iter_all_links, update_link
 from ..collections_cache import get_collections
 from ..config import get_api_config
-from ..content_enricher import enrich_link, RateLimitError
-from ..display import console, show_diff, get_tag_color
-from ..enrich_llm import is_title_empty, needs_enrichment
+from ..lw_enricher import enrich_link, RateLimitError, is_title_empty, needs_enrichment
+from common.display import console, show_diff, format_tags_display
 from ..newsletter import load_newsletter_index, match_newsletter
-from ..tag_utils import get_system_tags
-from ..url_utils import normalize_url
+from ..tag_utils import get_system_tags, build_newsletter_tags
+from common.url_utils import normalize_url
+from enricher.enrich_llm import enrich_content
 
 
 def _prepare_newsletter(link, nl_data):
@@ -26,12 +26,9 @@ def _prepare_newsletter(link, nl_data):
 
     nl_title = nl_data.get("title", "")
     nl_description = nl_data.get("description", "")
-    nl_date = nl_data.get("date", "")
 
     # Prepare tags
-    tags_to_add = ["unknow"]
-    if nl_date:
-        tags_to_add.append(nl_date)
+    tags_to_add = build_newsletter_tags(nl_data)
 
     # Check what needs updating
     new_tags = [t for t in tags_to_add if t not in existing_tags]
@@ -64,7 +61,7 @@ def _prepare_newsletter(link, nl_data):
     return changes
 
 
-def _prepare_llm(link, needs, prompt_path, verbose):
+def _prepare_llm(link, needs, prompt_path, verbose, nl_data=None):
     """Prepare LLM changes for a link.
 
     Returns a dict of proposed changes, or a tuple ("failed", reason) / ("rate_limited", reason) on error.
@@ -87,6 +84,39 @@ def _prepare_llm(link, needs, prompt_path, verbose):
 
     if result.get("_skipped"):
         reason = result.get("_reason", "unknown")
+
+        # Fallback: use newsletter data for tag generation if only tags are needed
+        nl_title = nl_data.get("title", "") if nl_data else ""
+        nl_description = nl_data.get("description", "") if nl_data else ""
+        only_tags_needed = needs.get("tags") and not needs.get("title") and not needs.get("description")
+        if nl_data and (nl_title or nl_description) and only_tags_needed:
+            console.print(f"  [yellow]Content unavailable, using newsletter data for tags[/yellow]")
+            minimal_content = (
+                f"<fetched_content>\n"
+                f"<content_type>article</content_type>\n"
+                f"<url>{link_url}</url>\n"
+                f"<title>{nl_title}</title>\n"
+                f"<content>\n{nl_description}\n</content>\n"
+                f"</fetched_content>"
+            )
+            result = enrich_content(link_url, minimal_content, original_title=nl_title, prompt_path=prompt_path, verbose=verbose)
+            if not result:
+                console.print(f"  [yellow]Skipped: {reason}[/yellow]")
+                console.print("")
+                return ("failed", f"Skipped: {reason}")
+            # Only extract tags and category — not title or description
+            changes = {}
+            normalized_url = normalize_url(link_url)
+            if normalized_url and normalized_url != link_url:
+                changes["url"] = normalized_url
+            if result.get("tags"):
+                changes["tags"] = result["tags"]
+            if result.get("category"):
+                changes["category"] = result["category"]
+            if result.get("suggested_category"):
+                changes["suggested_category"] = result["suggested_category"]
+            return changes
+
         console.print(f"  [yellow]Skipped: {reason}[/yellow]")
         console.print("")
         return ("failed", f"Skipped: {reason}")
@@ -179,10 +209,7 @@ def _display_link_changes(link, final, nl_changes, llm_changes, dry_run, verbose
         if "description" in llm_changes:
             show_diff(existing_desc or "", final["description"], indent="    ", label="desc")
         if llm_changes.get("tags"):
-            tags_display = ", ".join(
-                f"[{get_tag_color(t)}]{t}[/{get_tag_color(t)}]" for t in llm_changes["tags"]
-            )
-            console.print(f"    [green]+ tags:[/green] {tags_display}")
+            console.print(f"    [green]+ tags:[/green] {format_tags_display(llm_changes['tags'])}")
         if llm_changes.get("category"):
             cat_str = llm_changes["category"]
             if llm_changes.get("suggested_category"):
@@ -276,7 +303,7 @@ def _apply_changes(link, final, dry_run, verbose):
         return False
 
 
-def enrich_links(
+def enrich_all_links(
     prompt_path: str | None = None,
     collection_id: int | None = None,
     dry_run: bool = False,
@@ -376,7 +403,7 @@ def enrich_links(
                 console.print(f"{dry_label}#{link.get('id')}  [bold]{_link_name}[/bold]")
                 console.print(f"  [dim][link={_link_url}]{_link_url}[/link][/dim]")
                 header_shown = True
-                llm_changes = _prepare_llm(link, needs, prompt_path, verbose)
+                llm_changes = _prepare_llm(link, needs, prompt_path, verbose, nl_data=nl_data if use_newsletter else None)
                 if isinstance(llm_changes, tuple) and llm_changes[0] == "rate_limited":
                     console.print(f"\n[dim]Stopped after processing {processed} links[/dim]")
                     raise SystemExit(1)

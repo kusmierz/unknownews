@@ -5,7 +5,7 @@ Caches full yt-dlp info_dict to avoid hitting YouTube rate limits.
 """
 
 from typing import Optional, Dict, Any
-from .cache import get_cache, set_cache, remove_cache
+from common.cache import get_cache, set_cache, remove_cache
 
 CACHE_TYPE = "yt_dlp"
 CACHE_TTL_DAYS = 180  # Video metadata rarely changes

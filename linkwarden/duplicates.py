@@ -1,7 +1,7 @@
 """Duplicate detection utilities."""
 
 from collections import defaultdict
-from .url_utils import normalize_url, get_url_path_key
+from common.url_utils import normalize_url, get_url_path_key
 
 
 def find_duplicates(links: list[dict]) -> tuple[list[dict], list[dict]]:

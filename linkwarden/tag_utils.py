@@ -41,3 +41,15 @@ def filter_system_tags(tags: list[dict]) -> list[dict]:
 def get_system_tags(tags: list[dict]) -> list[dict]:
     """Get only system tags from a list of tags."""
     return [tag for tag in tags if is_system_tag(tag.get("name", ""))]
+
+
+def build_newsletter_tags(nl_data: dict) -> list[str]:
+    """Build the standard set of newsletter tags from newsletter data.
+
+    Returns ["unknow"] plus the date tag if present.
+    """
+    tags = ["unknow"]
+    date = nl_data.get("date", "")
+    if date:
+        tags.append(date)
+    return tags

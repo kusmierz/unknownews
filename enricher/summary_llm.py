@@ -1,8 +1,9 @@
-"""Summary-specific LLM orchestration — cache check, fetch, call LLM, cache save."""
+"""Summary-specific LLM orchestration - cache check, fetch, call LLM, cache save."""
 
 from . import summary_cache
-from .content_fetcher import fetch_content, format_content_for_llm
-from .display import console
+from .content_fetcher import fetch_content
+from .format import format_content_for_llm
+from common.display import console
 from .enrich_llm import load_prompt
 from .llm import call_api
 
@@ -17,7 +18,6 @@ def summarize_url(url: str, verbose: int = 0, force: bool = False) -> str | None
     Returns:
         Summary markdown string, or None on failure.
     """
-    # Check cache first
     if not force:
         cached = summary_cache.get_cached(url)
         if cached:
@@ -42,7 +42,6 @@ def summarize_content(content_data: dict, verbose: int = 0) -> str | None:
     """
     url = content_data.get("url") or content_data.get("original_url") or ""
 
-    # Check cache first
     if url:
         cached = summary_cache.get_cached(url)
         if cached:

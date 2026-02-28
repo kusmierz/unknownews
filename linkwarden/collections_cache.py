@@ -6,7 +6,7 @@ This is a thin wrapper around the unified cache service.
 from typing import List, Dict, Any
 
 from .api import fetch_all_collections
-from .cache import get_cache, set_cache, clear_cache_type
+from common.cache import get_cache, set_cache, clear_cache_type
 
 CACHE_TYPE = "collections"
 CACHE_KEY = "data"  # Single key for all collections

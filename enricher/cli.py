@@ -1,18 +1,18 @@
-"""Fetch and display content for a URL."""
+"""Standalone CLI logic for content fetching, enrichment, and summarization."""
 
+import argparse
 import json
 
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from ..content_fetcher import fetch_content
-from ..content_enricher import enrich_link
-from ..display import console
-from ..newsletter import load_newsletter_index, match_newsletter
-from ..summary_llm import summarize_content
+from .content_fetcher import fetch_content
+from .content_enricher import enrich_url
+from .summary_llm import summarize_content
+from common.display import console
 
 
-def fetch_url(
+def fetch_and_display(
     url: str,
     verbose: int = 0,
     raw: bool = False,
@@ -30,19 +30,19 @@ def fetch_url(
         force: Bypass cache and re-fetch
         enrich: Show cached enrichment data (runs LLM if not cached)
         summary: Generate LLM summary
+        json_output: Output as JSON
 
     Returns:
         Exit code (0 = success, 1 = failure)
     """
-
     if raw:
-      if enrich or summary:
-        console.print("[red]Error: --raw cannot be combined with --enrich, or --summary[/red]")
-        return 1
+        if enrich or summary:
+            console.print("[red]Error: --raw cannot be combined with --enrich or --summary[/red]")
+            return 1
 
     if json_output and raw:
-      console.print("[red]Error: --json cannot be combined with --raw[/red]")
-      return 1
+        console.print("[red]Error: --json cannot be combined with --raw[/red]")
+        return 1
 
     json_data: dict | None = {"url": url} if json_output else None
 
@@ -64,13 +64,13 @@ def fetch_url(
     result = fetch_content(url, verbose=verbose, force=force)
 
     if result is None:
-      console.print("[red]Failed to fetch content[/red]")
-      return 1
+        console.print("[red]Failed to fetch content[/red]")
+        return 1
 
     if result.get("_skip_fallback"):
-      reason = result.get("_reason", "unknown")
-      console.print(f"[yellow]Skipped:[/yellow] {reason}")
-      return 1
+        reason = result.get("_reason", "unknown")
+        console.print(f"[yellow]Skipped:[/yellow] {reason}")
+        return 1
 
     # --summary
     if summary:
@@ -102,9 +102,34 @@ def fetch_url(
         return 0
 
     # Default: markdown rendering
+    _render_content(result)
+    return 0
+
+
+def _get_enrich_data(url: str, verbose: int = 0) -> dict | None:
+    """Get enrichment data for a URL without rendering."""
+    enriched = enrich_url(url, verbose=verbose)
+    if not enriched or enriched.get("_skipped"):
+        return None
+    return enriched
+
+
+def _show_enrich(url: str, verbose: int = 0) -> None:
+    """Display enrichment data for a URL. Runs LLM enrichment if not cached."""
+    if verbose >= 1:
+        console.print("\n[dim]Running LLM enrichment...[/dim]")
+    enriched = enrich_url(url, verbose=verbose)
+    if not enriched or enriched.get("_skipped"):
+        console.print("[red]Enrichment failed[/red]")
+        return
+    _render_enrich_panel(enriched)
+
+
+def _render_content(result: dict) -> None:
+    """Render fetched content as markdown."""
     content_type = result.get("content_type", "?")
     fetch_method = result.get("fetch_method", "?")
-    console.rule(f"[dim]{content_type} · {fetch_method}[/dim]")
+    console.rule(f"[dim]{content_type} . {fetch_method}[/dim]")
 
     if result.get("title"):
         console.print(Markdown(f"# {result['title']}"))
@@ -118,7 +143,7 @@ def fetch_url(
         console.print(Markdown("  ".join(meta_parts)))
 
     text = result.get("transcript") or result.get("text_content") or ""
-    # Strip leading title to avoid duplication (trafilatura often includes it)
+    # Strip leading title to avoid duplication
     if text and result.get("title"):
         title = result["title"]
         stripped = text.lstrip()
@@ -132,66 +157,6 @@ def fetch_url(
         console.print(Markdown(text))
     else:
         console.print("[dim]No text content available[/dim]")
-
-    return 0
-
-
-def _get_enrich_data(url: str, verbose: int = 0) -> dict | None:
-    """Get enrichment data for a URL without rendering.
-
-    Returns merged enrichment dict or None on failure.
-    """
-    nl_data = None
-    try:
-        exact_index, fuzzy_index = load_newsletter_index()
-        nl_data, _ = match_newsletter({"url": url}, exact_index, fuzzy_index)
-    except FileNotFoundError:
-        pass
-
-    enriched = enrich_link(url, verbose=verbose)
-    if not enriched or enriched.get("_skipped"):
-        return None
-
-    if nl_data:
-        if nl_data.get("description"):
-            enriched["description"] = nl_data["description"]
-        if nl_data.get("title"):
-            enriched["title"] = nl_data["title"]
-
-    return enriched
-
-
-def _show_enrich(url: str, verbose: int = 0) -> None:
-    """Display enrichment data for a URL. Runs LLM enrichment if not cached.
-
-    Also checks newsletter index — if the URL is found, newsletter description
-    takes priority over LLM description (matching the enrich command behavior).
-    """
-    # Check newsletter for this URL
-    nl_data = None
-    try:
-        exact_index, fuzzy_index = load_newsletter_index()
-        nl_data, match_type = match_newsletter({"url": url}, exact_index, fuzzy_index)
-        if nl_data and verbose >= 1:
-            console.print(f"\n[dim]Newsletter match ({match_type}): {nl_data.get('title', '')}[/dim]")
-    except FileNotFoundError:
-        pass
-
-    if verbose >= 1:
-        console.print("\n[dim]Running LLM enrichment...[/dim]")
-    enriched = enrich_link(url, verbose=verbose)
-    if not enriched or enriched.get("_skipped"):
-        console.print("[red]Enrichment failed[/red]")
-        return
-
-    # Merge: newsletter data takes priority over LLM
-    if nl_data:
-        if nl_data.get("description"):
-            enriched["description"] = nl_data["description"]
-        if nl_data.get("title"):
-            enriched["title"] = nl_data["title"]
-
-    _render_enrich_panel(enriched)
 
 
 def _render_enrich_panel(data: dict) -> None:
@@ -223,3 +188,39 @@ def _render_summary(summary: str | None) -> None:
         console.print(Panel(Markdown(summary), title="Summary", border_style="green"))
     else:
         console.print("[red]Failed to generate summary[/red]")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build argument parser for the standalone enricher CLI."""
+    parser = argparse.ArgumentParser(
+        description="Fetch, enrich, and summarize URL content.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("url", help="URL to fetch")
+    parser.add_argument("--raw", action="store_true", help="Raw text output only")
+    parser.add_argument("--force", "-f", action="store_true", help="Bypass cache")
+    parser.add_argument("--enrich", action="store_true", help="Show LLM enrichment")
+    parser.add_argument("--summary", action="store_true", help="Generate LLM summary")
+    parser.add_argument("--json", dest="json_output", action="store_true", help="Output as JSON")
+    parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase verbosity")
+    return parser
+
+
+def main():
+    """Entry point for the standalone enricher CLI."""
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    parser = build_parser()
+    args = parser.parse_args()
+
+    exit_code = fetch_and_display(
+        url=args.url,
+        verbose=args.verbose,
+        raw=args.raw,
+        force=args.force,
+        enrich=args.enrich,
+        summary=args.summary,
+        json_output=args.json_output,
+    )
+    raise SystemExit(exit_code)

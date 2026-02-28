@@ -1,4 +1,4 @@
-"""Enrichment-specific LLM orchestration — calls LLM, parses results."""
+"""Enrichment-specific LLM orchestration - calls LLM, parses results."""
 
 import html
 import json
@@ -8,8 +8,7 @@ from urllib.parse import urlparse
 
 from .llm import call_api
 from . import llm_cache
-from .display import console
-from .tag_utils import has_real_tags
+from common.display import console
 
 PROMPT_PATH = "prompts/enrich-link.md"
 
@@ -36,15 +35,12 @@ def parse_json_response(response_text: str) -> dict | None:
     if json_match:
         json_str = json_match.group(1).strip()
     else:
-        # Try to parse the whole response as JSON
         json_str = response_text.strip()
 
     try:
         data = json.loads(json_str)
-        # LLM returns null when content can't be fetched
         if data is None:
             return {"_skipped": True, "_reason": "LLM couldn't access content"}
-        # Decode HTML entities (e.g., &#39; -> ')
         title = html.unescape(data.get("title", "") or "")
         description = html.unescape(data.get("description", "") or "")
         tags = [html.unescape(t) for t in data.get("tags", [])]
@@ -64,11 +60,7 @@ BOGUS_TITLES = {"just a moment...", "attention required!", "access denied", "unt
 
 
 def is_title_empty(name: str, url: str) -> bool:
-    """Check if a link title is considered empty or bogus.
-
-    Empty/bogus means: empty string, equals the URL domain, or a known bogus title
-    (e.g. Cloudflare challenge pages).
-    """
+    """Check if a link title is considered empty or bogus."""
     if not name or not name.strip():
         return True
 
@@ -76,11 +68,9 @@ def is_title_empty(name: str, url: str) -> bool:
     if name_lower in BOGUS_TITLES:
         return True
 
-    # Check if name is just the domain
     try:
         parsed = urlparse(url)
         domain = parsed.netloc
-        # Remove www. prefix for comparison
         if domain.startswith("www."):
             domain = domain[4:]
         if name_lower == domain.lower() or name_lower == f"www.{domain.lower()}":
@@ -101,34 +91,8 @@ def is_description_empty(description: str) -> bool:
     return not description or not description.strip()
 
 
-def needs_enrichment(link: dict, force: bool = False) -> dict:
-    """Determine what fields need enrichment for a link.
-
-    Returns dict with keys: title, description, tags (bool values)
-    """
-    if force:
-        return {"title": True, "description": True, "tags": True}
-
-    url = link.get("url", "")
-    name = link.get("name", "")
-    description = link.get("description", "")
-    tags = link.get("tags", [])
-
-    return {
-        "title": is_title_empty(name, url) or not has_llm_title(name),
-        "description": is_description_empty(description),
-        "tags": not has_real_tags(tags),
-    }
-
-
 def enrich_content(url: str, formatted_content: str, original_title: str = "", prompt_path: str | None = None, verbose: int = 0, file_url: str | None = None) -> dict | None:
     """Call LLM to enrich a URL given pre-formatted content.
-
-    Uses OpenAI-compatible API. Configure via environment variables:
-    - OPENAI_API_KEY: API key (required)
-    - OPENAI_BASE_URL: Base URL (optional, for Groq/other providers)
-    - OPENAI_MODEL: Model name (default: gpt-4o-mini)
-    - OPENAI_USE_RESPONSE_API: Set to "1" to use Responses API
 
     Args:
         url: The URL being enriched (used for caching)
@@ -136,6 +100,7 @@ def enrich_content(url: str, formatted_content: str, original_title: str = "", p
         original_title: Original title from content fetcher (attached to result)
         prompt_path: Path to the prompt template file
         verbose: Verbosity level (0=quiet, 1=details, 2=LLM prompts)
+        file_url: Optional file URL for multimodal API
 
     Returns:
         Dict with keys: title, description, tags (list), category, suggested_category
@@ -144,14 +109,12 @@ def enrich_content(url: str, formatted_content: str, original_title: str = "", p
     if not prompt_path:
         prompt_path = PROMPT_PATH
 
-    # Load prompt template
     try:
         prompt_template = load_prompt(prompt_path)
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         return None
 
-    # Call API
     response_text = call_api(formatted_content, prompt_template, verbose=verbose, file_url=file_url)
 
     if not response_text:

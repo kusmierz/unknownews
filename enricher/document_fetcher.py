@@ -10,8 +10,8 @@ import logging
 
 from markitdown import MarkItDown
 
-from .fetcher_utils import truncate_content
-from .display import console
+from common.fetcher_utils import truncate_content
+from common.display import console
 from . import article_cache
 
 # Suppress noisy pdfminer warnings (e.g. "Could not get FontBBox from font descriptor")

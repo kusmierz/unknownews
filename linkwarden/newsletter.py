@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any, TypedDict
 
-from .url_utils import normalize_url, get_url_path_key
+from common.url_utils import normalize_url, get_url_path_key
 
 JSONL_PATH = "data/newsletters.jsonl"
 

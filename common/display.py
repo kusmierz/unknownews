@@ -21,6 +21,13 @@ def get_tag_color(tag_name: str) -> str:
     return TAG_COLORS[tag_hash % len(TAG_COLORS)]
 
 
+def format_tags_display(tags: list[str]) -> str:
+    """Format a list of tag names as a colored Rich markup string."""
+    return ", ".join(
+        f"[{get_tag_color(t)}]{t}[/{get_tag_color(t)}]" for t in tags
+    )
+
+
 def show_diff(old: str, new: str, indent: str = "      ", muted: bool = False, label: str = "") -> None:
     """Show diff with highlighted changes using rich."""
     matcher = difflib.SequenceMatcher(None, old, new)

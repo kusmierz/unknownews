@@ -4,7 +4,7 @@ This is a thin wrapper around the unified cache service.
 """
 
 from typing import Optional
-from .cache import get_cache, set_cache, remove_cache
+from common.cache import get_cache, set_cache, remove_cache
 
 CACHE_TYPE = "summary"
 CACHE_TTL_DAYS = 30

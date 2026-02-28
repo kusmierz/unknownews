@@ -5,7 +5,7 @@ Caches extracted article content to avoid re-downloading.
 """
 
 from typing import Optional, Dict, Any
-from .cache import get_cache, set_cache, remove_cache
+from common.cache import get_cache, set_cache, remove_cache
 
 CACHE_TYPE = "article"
 CACHE_TTL_DAYS = 180

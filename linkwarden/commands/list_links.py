@@ -9,9 +9,9 @@ from rich.text import Text
 from ..links import fetch_all_links, fetch_collection_links
 from ..collections_cache import get_collections
 from ..config import get_api_config
-from ..display import console, get_tag_color
+from common.display import console, get_tag_color
 from ..duplicates import find_duplicates
-from ..enrich_llm import is_title_empty
+from enricher.enrich_llm import is_title_empty
 
 
 def list_links(collection_id: int | None = None, verbose: int = 0) -> None:

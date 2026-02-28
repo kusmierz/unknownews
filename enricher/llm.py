@@ -7,7 +7,7 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 from openai.types.shared_params import ResponseFormatJSONObject
 
-from .display import console
+from common.display import console
 
 DEFAULT_MODEL = "gpt-4o-mini"
 

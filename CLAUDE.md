@@ -22,15 +22,15 @@ python scraper.py -n 50                           # fetch up to 50 newsletters
 python scraper.py --force                         # bypass 3-hour cache
 python scraper.py <url> -n 20                     # start from specific URL
 
-# Fetch and display content for a URL
-python linkwarden.py fetch <url>                  # render content as markdown
-python linkwarden.py fetch <url> --raw            # raw text only
-python linkwarden.py fetch <url> --force          # bypass cache, re-fetch
-python linkwarden.py fetch <url> --enrich         # show LLM enrichment (runs if not cached)
-python linkwarden.py fetch <url> --summary        # generate LLM summary
-python linkwarden.py fetch <url> --json           # output as JSON
-python linkwarden.py fetch <url> --enrich --summary  # enrichment + summary
-python linkwarden.py fetch <url> -v               # fetch details
+# Standalone content fetcher / enricher (no Linkwarden dependency)
+python enricher.py <url>                          # fetch and render content as markdown
+python enricher.py <url> --raw                    # raw text only
+python enricher.py <url> --force                  # bypass cache, re-fetch
+python enricher.py <url> --enrich                 # show LLM enrichment (runs if not cached)
+python enricher.py <url> --summary                # generate LLM summary
+python enricher.py <url> --json                   # output as JSON
+python enricher.py <url> --enrich --summary       # enrichment + summary
+python enricher.py <url> -v                       # fetch details
 
 # Add URL to Linkwarden (with newsletter or LLM enrichment)
 python linkwarden.py add <url>                    # add to Uncategorized (with warning)
@@ -48,16 +48,16 @@ python linkwarden.py list                    # list all links grouped by collect
 python linkwarden.py list --collection 14   # list links from specific collection
 
 # Enrich links (newsletter data + LLM)
-python linkwarden.py enrich                       # newsletter match + LLM (default)
-python linkwarden.py enrich --newsletter-only     # newsletter data only (no LLM)
-python linkwarden.py enrich --llm-only            # LLM only (no newsletter matching)
-python linkwarden.py enrich --collection 14       # specific collection
-python linkwarden.py enrich --force               # overwrite all LLM fields
-python linkwarden.py enrich --dry-run             # preview without updating
-python linkwarden.py enrich --limit 5             # limit processed links
-python linkwarden.py enrich --show-unmatched      # show URLs not in newsletter
-python linkwarden.py enrich -v                    # short diagnostics
-python linkwarden.py enrich -vv                   # full details incl. LLM prompts
+python linkwarden.py enrich-all                       # newsletter match + LLM (default)
+python linkwarden.py enrich-all --newsletter-only     # newsletter data only (no LLM)
+python linkwarden.py enrich-all --llm-only            # LLM only (no newsletter matching)
+python linkwarden.py enrich-all --collection 14       # specific collection
+python linkwarden.py enrich-all --force               # overwrite all LLM fields
+python linkwarden.py enrich-all --dry-run             # preview without updating
+python linkwarden.py enrich-all --limit 5             # limit processed links
+python linkwarden.py enrich-all --show-unmatched      # show URLs not in newsletter
+python linkwarden.py enrich-all -v                    # short diagnostics
+python linkwarden.py enrich-all -vv                   # full details incl. LLM prompts
 
 # Remove duplicate links across all collections
 python linkwarden.py remove-duplicates --dry-run  # preview deletions
@@ -84,92 +84,94 @@ Caching:
 - Uses `cache/last-fetch.txt` to track last fetch time
 - Only fetches once per 3 hours (bypass with `--force`)
 
+### Module dependency order
+
+```
+common/ ← transcriber/ ← enricher/ ← linkwarden/
+                                    ↑
+                          enricher.py (standalone CLI)
+```
+
+### enricher.py (standalone CLI entry point)
+Thin wrapper around `enricher/cli.py`. Fetches and displays content for any URL without Linkwarden dependency.
+
 ### linkwarden.py (main CLI)
-Entry point for Linkwarden tools. Parses command-line arguments and dispatches to command implementations.
+Thin entry point (~15 lines). Imports `linkwarden.cli.main` and dispatches to command implementations. Commands: `add`, `list`, `enrich-all`, `remove-duplicates`.
 
-### linkwarden/ (module)
-Modular Linkwarden tools for enriching links and managing duplicates. Uses `rich` for colored output.
-
-**Core modules:**
-- `config.py` - Configuration utility
-  - `get_api_config()` - reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment
+### common/ (shared utilities — no project imports)
 - `cache.py` - Unified cache service for all cache types
   - `get_cache(key, cache_type, max_age_days)` - get cached value with optional expiration
   - `set_cache(key, value, cache_type, ttl_days)` - set cache with optional TTL
   - `remove_cache(key, cache_type)` - remove specific cache entry
   - `clear_cache_type(cache_type)` - clear all cache for a type
-- `api.py` - Linkwarden API client (self-sustainable, reads credentials from environment)
-  - `fetch_all_collections()` - get all collections
-  - `fetch_collection_links(collection_id)` - get links from collection (paginated)
-  - `update_link(link, new_name, new_url, new_description, new_tags, dry_run)` - update link via PUT
-  - `create_link(url, name, description, tags, collection_id)` - create link via POST
-  - `delete_link(link_id)` - delete link
-- `links.py` - Link operations facade (re-exports API functions + orchestration)
-  - `fetch_all_links(silent)` - get all links from all collections (uses collections cache)
-  - Re-exports: `fetch_collection_links`, `update_link`, `create_link`, `delete_link`
+- `display.py` - Rich console formatting
+  - `console` - global Rich Console instance
+  - `show_diff(old, new, indent, muted)` - displays inline diff
+  - `get_tag_color(tag_name)` - consistent tag colors
+  - `format_tags_display(tags)` - format list of tag names as colored Rich markup string
 - `url_utils.py` - URL normalization and matching
   - `normalize_url(url)` - removes fragments, tracking params, normalizes http->https
   - `get_url_path_key(url)` - extracts domain+path for fuzzy matching
   - `filter_query_params(query, keep_only)` - filters query parameters
-- `newsletter.py` - Newsletter index management
-  - `load_newsletter_index(jsonl_path)` -> `(exact_index, fuzzy_index)`
-- `display.py` - Rich console formatting
-  - `show_diff(old, new, indent, muted)` - displays inline diff
-  - `get_tag_color(tag_name)` - consistent tag colors
-- `duplicates.py` - Duplicate detection
-  - `find_duplicates(links)` -> `(exact_groups, fuzzy_groups)`
 - `fetcher_utils.py` - Shared utilities and exceptions for content fetchers
   - `truncate_content(text, max_chars)` - intelligent sentence-boundary truncation
   - `format_duration(seconds)` - converts seconds to human-readable duration
   - `is_video_url(url)` - URL-based video platform detection
   - Exceptions: `ContentFetchError`, `RateLimitError`
-- `content_fetcher.py` - Content fetching orchestrator (re-exports `RateLimitError` for backward compat)
-  - `fetch_content(url)` - orchestrates content fetching based on URL type (article, video, document, playwright fallback)
-  - `format_content_for_llm(content_data)` - formats fetch_content() output as XML for LLM
-- `content_enricher.py` - Content fetching + LLM enrichment orchestration
-  - `enrich_link(url, prompt_path, verbose, link, status)` - cache check → fetch → enrich (with Linkwarden fallback)
-- `article_fetcher.py` - Article content fetching (cached 7 days)
-  - `fetch_article_content(url)` - uses trafilatura to extract article content; falls back to Playwright on failure
-- `document_fetcher.py` - Document content fetching (PDF, DOCX, PPTX, XLSX via markitdown, cached 7 days)
-  - `fetch_document_content(url, doc_type)` - converts document to markdown
-- `video_fetcher.py` - Video content fetching
-  - `fetch_video_content(url)` - uses yt-dlp for metadata + youtube-transcript-api for transcripts (cached 7 days)
-  - `extract_transcript_from_info(info_dict)` - extracts transcript via youtube-transcript-api (languages: original → en → pl)
-  - **Optimization**: Caches only essential data + transcript (~10 KB per video)
+
+### transcriber/ (video/audio transcription)
+- `video_fetcher.py` - `fetch_video_content(url)` - uses yt-dlp for metadata + youtube-transcript-api for transcripts (cached 7 days, ~10 KB per video)
+- `transcript.py` - `extract_transcript_from_info(info_dict)` - extracts transcript via youtube-transcript-api (languages: original → en → pl)
+- `local.py` - stub for local video transcription (`NotImplementedError`)
+- `yt_dlp_cache.py` - Thin wrapper around unified cache for yt-dlp video info (7-day TTL)
+
+### enricher/ (generic content enrichment — no Linkwarden deps)
+- `content_fetcher.py` - `fetch_content(url, verbose, force)` - orchestrates fetching by URL type (article, video, document, playwright fallback)
+- `format.py` - `format_content_for_llm(content_data)` - formats fetch_content() output as XML for LLM
+- `content_enricher.py` - `enrich_url(url, prompt_path, verbose, extra_context, status)` - cache check → fetch → enrich (generic, no Linkwarden fallback)
+- `article_fetcher.py` - `fetch_article_content(url)` - uses trafilatura; falls back to Playwright
+- `document_fetcher.py` - `fetch_document_content(url, doc_type)` - PDF/DOCX/PPTX/XLSX via markitdown
 - `llm.py` - Generic OpenAI-compatible API client
-  - `call_api(user_prompt, system_prompt, max_retries, verbose, file_url, json_mode)` - orchestrator with retry + verbose display
-  - `call_responses_api(...)` - OpenAI Responses API with web search (supports `file_url` attachment)
+  - `call_api(user_prompt, system_prompt, max_retries, verbose, file_url, json_mode)` - orchestrator with retry
+  - `call_responses_api(...)` - OpenAI Responses API with web search
   - `call_chat_completions_api(...)` - standard Chat Completions API
-- `enrich_llm.py` - Low-level LLM enrichment utilities
+- `enrich_llm.py` - LLM enrichment utilities
   - `enrich_content(url, formatted_content, original_title, prompt_path, verbose, file_url)` - calls LLM and caches result
   - `load_prompt(prompt_path)` - loads prompt template file
   - `parse_json_response(text)` - parses JSON from LLM response, decodes HTML entities
-  - `needs_enrichment(link, force)` - checks which fields need enrichment
-- `summary_llm.py` - Summary-specific LLM orchestration
-  - `summarize_url(url, verbose, force)` - standalone entry point: cache check → fetch → summarize
-  - `summarize_content(content_data, verbose)` - generate summary from pre-fetched content data
+- `summary_llm.py` - `summarize_url(url, verbose, force)` / `summarize_content(content_data, verbose)`
+- `title_utils.py` - `format_enriched_title(llm_title, original_title)` - bracket notation formatting
+- `cli.py` - CLI logic for `enricher.py` (no Linkwarden/newsletter deps)
 - `llm_cache.py` - Thin wrapper around unified cache for LLM results (no expiry)
-  - `get_cached(url)` / `set_cached(url, result)` / `remove_cached(url)`
 - `summary_cache.py` - Thin wrapper around unified cache for LLM summaries (30-day TTL)
-  - `get_cached(url)` / `set_cached(url, summary)` / `remove_cached(url)`
 - `article_cache.py` - Thin wrapper around unified cache for article content (7-day TTL)
-  - `get_cached(url)` / `set_cached(url, data)`
-- `yt_dlp_cache.py` - Thin wrapper around unified cache for yt-dlp video info (7-day TTL)
-  - `get_cached(url)` / `set_cached(url, info_dict)`
-- `collections_cache.py` - Thin wrapper around unified cache for collections (1-day TTL)
-  - `get_collections()` - fetch collections from cache or API
-  - `clear_collections_cache()` - clear collections cache
-- `tag_utils.py` - Tag filtering utilities
+
+### linkwarden/ (Linkwarden-specific sync/API/commands)
+**Core modules:**
+- `config.py` - `get_api_config()` - reads LINKWARDEN_URL and LINKWARDEN_TOKEN from environment
+- `api.py` - Linkwarden API client
+  - `fetch_all_collections()`, `fetch_collection_links(collection_id)`, `update_link(...)`, `create_link(...)`, `delete_link(link_id)`
+- `links.py` - Link operations facade (re-exports API functions + orchestration)
+  - `fetch_all_links(silent)`, `iter_all_links(silent)`, `iter_collection_links(collection_id)`
+- `newsletter.py` - `load_newsletter_index()` → `(exact_index, fuzzy_index)`, `match_newsletter(link, ...)`
+- `duplicates.py` - `find_duplicates(links)` → `(exact_groups, fuzzy_groups)`
+- `collections_cache.py` - `get_collections()` / `clear_collections_cache()` (1-day TTL)
+- `tag_utils.py` - Tag filtering and creation
   - `is_system_tag(tag_name)` - checks for "unknow", "unread", or date tags (YYYY-MM-DD)
-  - `has_real_tags(tags)` - checks if link has non-system tags
-  - `filter_system_tags(tags)` / `get_system_tags(tags)`
+  - `has_real_tags(tags)` / `filter_system_tags(tags)` / `get_system_tags(tags)`
+  - `build_newsletter_tags(nl_data)` - returns `["unknow", date]` from newsletter data
+- `lw_content.py` - `fetch_linkwarden_content(link)` - fetches content using Linkwarden link dict as fallback
+- `lw_enricher.py` - Linkwarden-aware enrichment wrapper
+  - `enrich_link(url, prompt_path, verbose, link, status)` - wraps `enricher.enrich_url()` with Linkwarden fallback
+  - `needs_enrichment(link, force)` - checks which fields need enrichment (Linkwarden tag format)
+  - Re-exports: `is_title_empty`, `has_llm_title`, `is_description_empty`, `RateLimitError`
+- `cli.py` - `build_parser()` / `dispatch(args)` / `main()` - argparse setup extracted from linkwarden.py
 
 **Commands** (in `linkwarden/commands/`) - all self-sustainable, read credentials from environment:
 - `add.py` - `add_link(url, collection_id, dry_run, unread, silent)` - adds URL with enrichment
-- `fetch.py` - `fetch_url(url, verbose, raw, force, enrich, summary, json_output)` - fetch and display URL content
+- `enrich_all.py` - `enrich_all_links(...)` - newsletter + LLM enrichment for existing links
 - `list_links.py` - `list_links(collection_id)` - lists all links grouped by collection
 - `remove_duplicates.py` - `remove_duplicates(dry_run)` - finds and removes duplicates
-- `enrich.py` - `enrich_links(...)` - newsletter + LLM enrichment (merged sync+enrich)
 
 ## Output structure
 

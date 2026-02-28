@@ -15,9 +15,36 @@ import trafilatura
 from markitdown import MarkItDown
 from trafilatura.downloads import DEFAULT_HEADERS
 
-from .fetcher_utils import truncate_content
-from .display import console
+from common.fetcher_utils import truncate_content
+from common.display import console
 from . import article_cache
+
+_JS_WALL_SIGNALS = [
+    "javascript is not available",
+    "javascript is disabled",
+    "please enable javascript",
+    "enable javascript or switch to a supported browser",
+    "javascript must be enabled",
+    "requires javascript to be enabled",
+    "you need to enable javascript to run this app",
+]
+
+
+def is_js_wall(result: dict) -> bool:
+    """Detect if fetched content is a JavaScript-required error page rather than real content."""
+    title = (result.get("title") or "").lower()
+    text = (result.get("text_content") or "").lower()
+
+    if "javascript is not available" in title:
+        return True
+
+    # JS walls are typically short — only check short content to avoid false positives
+    if len(text) < 1000:
+        for signal in _JS_WALL_SIGNALS:
+            if signal in text:
+                return True
+
+    return False
 
 ARTICLE_MAX_CHARS = 64_000
 
@@ -231,7 +258,11 @@ def fetch_article_with_playwright(url: str, verbose: int = 0, force: bool = Fals
                             )
 
                     page = context.pages[0]
-                    page.goto(url, wait_until="networkidle", timeout=30_000)
+                    try:
+                        page.goto(url, wait_until="networkidle", timeout=15_000)
+                    except Exception:
+                        # SPAs (e.g. X/Twitter) never go network-idle; fall back to load event
+                        page.goto(url, wait_until="load", timeout=15_000)
                     # Extra delay for JS-heavy / lazy-loaded pages
                     page.wait_for_timeout(5000)
                     page_title = page.title() or ""
@@ -290,12 +321,13 @@ def fetch_article_content(url: str, verbose: int = 0, force: bool = False) -> Op
             return None
 
         if verbose:
-            console.print(f"[dim]  Article downloaded ({len(downloaded):,} chars)[/dim]")
+            console.print(f"[dim]  HTML fetched ({len(downloaded):,} chars raw)[/dim]")
 
         result = extract_article_from_html(downloaded, verbose=verbose)
         if result:
             result["_fetch_method"] = "trafilatura"
-            article_cache.set_cached(url, result)
+            if not is_js_wall(result):
+                article_cache.set_cached(url, result)
         return result
 
     except Exception:
