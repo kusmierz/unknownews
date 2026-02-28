@@ -55,24 +55,122 @@ WAŻNE:
 
 ## Kategoria (pole "category")
 
-Wybierz dokładnie jedną, najbardziej pasującą kategorię z listy:
-- AI
-- Software Development
-- DevOps & Infrastructure
-- Security & Privacy
-- Data & Databases
-- Product, UX & Design
-- Hardware & DIY
-- Business & Finance
-- Work & Career
-- Science & Society
-- Tools & Resources
-- Other
+Wybierz DOKŁADNIE jedną kategorię główną (top-level) z listy poniżej.
+Następnie wybierz DOKŁADNIE jedną subkategorię z obrębie tej kategorii (pole "subcategory").
 
-### Zasady
-- Jeśli wahasz się między dwiema kategoriami, wybierz bardziej OGÓLNĄ z listy.
-- Jeśli materiał nie pasuje wyraźnie do żadnej kategorii, możesz zasugerować nową w polu "suggested_category", ale i tak MUSISZ wybrać jedną z listy w polu "category".
-- "suggested_category" ustawiaj TYLKO gdy to naprawdę konieczne (materiał wyraźnie odstaje od listy).
+### Lista kategorii i subkategorii
+
+- AI & ML
+  - LLMs & Prompting
+  - Agents & Tooling
+  - Eval/Inference/Serving
+  - AI Industry
+
+- Software Engineering
+  - Architecture
+  - Backend
+  - Frontend
+  - Testing/Quality
+  - Performance
+  - Languages
+
+- Data Systems
+  - SQL/DB Internals
+  - Data Modeling
+  - Caching/Queues
+  - Analytics
+  - Search/Vector
+
+- Infra & Platforms
+  - Containers
+  - Linux
+  - Networking
+  - Cloud
+  - Observability
+  - SRE/On-call
+  - Email/DNS
+
+- Security
+  - AppSec
+  - CloudSec
+  - AI Security
+  - Threats/Incidents
+  - Privacy
+
+- Product & Design
+  - UX
+  - UI
+  - Research
+  - Product Strategy
+  - Discovery/Prioritization
+
+- Career & Leadership
+  - Interviews
+  - Communication/Collaboration
+  - Management
+  - Productivity
+  - Decision-Making
+
+- Business & Money
+  - Personal Finance
+  - Investing
+  - Entrepreneurship
+  - Real Estate
+  - Taxes
+
+- Hardware & Systems
+  - Raspberry Pi/MCUs
+  - Electronics
+  - Batteries/Power
+  - Repair/Reverse
+  - Home Lab
+
+- Tools & Workflows
+  - CLI
+  - Git
+  - Editors/IDE
+  - Automation
+  - Self-hosted tools
+  - Templates/Playbooks
+
+- Science & Culture
+  - Science explainers
+  - Society/Policy
+  - History of tech
+  - General knowledge
+
+- Misc / Inbox
+  - Uncategorized
+
+### Zasady wyboru
+
+1) Wybierz kategorię po tym, “o czym to jest NAJBARDZIEJ”, a nie po tym, jakie technologie są wspomniane pobocznie.
+
+2) Jeśli wahasz się między:
+   - Tools & Workflows vs Infra & Platforms:
+     - jeśli to o usprawnieniu pracy (narzędzie, workflow, konfiguracja środowiska) → Tools & Workflows
+     - jeśli to o uruchamianiu/utrzymaniu systemów (serwery, sieci, kontenery, produkcja, DNS/email) → Infra & Platforms
+
+3) Security ma pierwszeństwo, gdy głównym tematem jest atak/obrona/podatność/eksfiltracja:
+   - prompt injection, model jailbreak, agent security → Security / AI Security
+   - DMARC/SPF/DKIM jako konfiguracja poczty → Infra & Platforms / Email/DNS
+   - ale DMARC jako ochrona przed spoofingiem (ujęcie stricte security) → Security / Threats/Incidents
+
+4) AI & ML wybieraj wtedy, gdy AI jest rdzeniem materiału (LLM, agenci, inference, eval).  
+   Jeśli AI jest tylko narzędziem użytym “przy okazji”, wybierz domenę (np. Software Engineering).
+
+5) Jeśli materiał nie pasuje wyraźnie do żadnej kategorii:
+   - ustaw category = "Misc / Inbox" oraz subcategory = "Uncategorized"
+   - tylko jeśli to częsty typ treści i wyraźnie brakuje miejsca w taksonomii, dodaj pole "suggested_category"
+
+6) "suggested_category" ustawiaj TYLKO gdy to naprawdę konieczne (materiał wyraźnie odstaje i będzie wracał regularnie).
+   Mimo to zawsze MUSISZ wybrać jedną kategorię z listy oraz jedną subkategorię.
+
+### Dodatkowe wskazówki spójności (żeby to działało miesiącami)
+
+- Jeśli materiał dotyczy baz danych i jest techniczny (indeksy, query planner, internals) → Data Systems / SQL/DB Internals.
+- Jeśli to o planowaniu pracy, komunikacji, 1:1, feedbacku, konfliktach → Career & Leadership.
+- Jeśli to ogólne ciekawostki, popularnonaukowe wyjaśnienia, “why is the sky blue?” → Science & Culture.
 
 # Format odpowiedzi
 
