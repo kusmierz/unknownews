@@ -29,10 +29,10 @@ def summarize_url(url: str, verbose: int = 0, force: bool = False) -> str | None
     if result is None or result.get("_skip_fallback"):
         return None
 
-    return summarize_content(result, verbose=verbose)
+    return summarize_content(result, verbose=verbose, force=force)
 
 
-def summarize_content(content_data: dict, verbose: int = 0) -> str | None:
+def summarize_content(content_data: dict, verbose: int = 0, force: bool = False) -> str | None:
     """Generate an LLM summary from pre-fetched content data.
 
     Checks summary cache, formats content, calls LLM, caches result.
@@ -42,7 +42,7 @@ def summarize_content(content_data: dict, verbose: int = 0) -> str | None:
     """
     url = content_data.get("url") or content_data.get("original_url") or ""
 
-    if url:
+    if url and not force:
         cached = summary_cache.get_cached(url)
         if cached:
             if verbose:

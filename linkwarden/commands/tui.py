@@ -10,7 +10,8 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Footer, Header, Markdown, Tree
+from textual.screen import ModalScreen
+from textual.widgets import Footer, Header, Label, Markdown, Tree
 
 from common.fetcher_utils import is_video_url
 from ..collections_cache import get_collections
@@ -60,6 +61,38 @@ def _load_video_transcript_keys() -> set[str]:
         return set()
 
 
+class _ConfirmFetchScreen(ModalScreen[bool]):
+    """Modal asking the user whether to fetch content before generating a summary."""
+
+    CSS = """
+    _ConfirmFetchScreen {
+        align: center middle;
+    }
+    _ConfirmFetchScreen Label {
+        padding: 2 4;
+        background: $panel;
+        border: tall $primary;
+        text-align: center;
+    }
+    """
+
+    BINDINGS = [
+        Binding("y", "yes", "Yes"),
+        Binding("enter", "yes", "Yes"),
+        Binding("n", "no", "No"),
+        Binding("escape", "no", "No"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        yield Label("No content cached.\nFetch article/transcript first?\n\n[y] Yes   [n] No")
+
+    def action_yes(self) -> None:
+        self.dismiss(True)
+
+    def action_no(self) -> None:
+        self.dismiss(False)
+
+
 class LinkBrowserApp(App):
     """Lazygit-style TUI browser for Linkwarden links."""
 
@@ -101,10 +134,10 @@ class LinkBrowserApp(App):
         Binding("1", "view_mode('1')", "Short"),
         Binding("2", "view_mode('2')", "Long"),
         Binding("3", "view_mode('3')", "Reader"),
-        Binding("f", "fetch_article", "Fetch article"),
-        Binding("shift+f", "refetch_article", "Refetch article", key_display="F"),
-        Binding("s", "fetch_summary", "Fetch summary"),
-        Binding("shift+s", "refetch_summary", "Regen summary", key_display="S"),
+        Binding("f", "fetch_article", "Fetch"),
+        Binding("F", "refetch_article", "Refetch"),
+        Binding("s", "fetch_summary", "Gen summary"),
+        Binding("S", "refetch_summary", "Regen summary"),
         *[Binding(key, f"filter_tag('{tag}')", f"#{tag}") for key, tag in _QUICK_FILTERS],
     ]
 
@@ -124,6 +157,7 @@ class LinkBrowserApp(App):
         self._selected_link: dict | None = None
         self._fetching_articles: set[str] = set()
         self._fetching_summaries: set[str] = set()
+        self._auto_summarize_after_fetch: set[str] = set()
 
     # ── Compose ───────────────────────────────────────────────────────────────
 
@@ -227,6 +261,13 @@ class LinkBrowserApp(App):
         tags_line = "  ".join(f"`{t}`" for t in tags) if tags else "—"
 
         if mode == 3:
+            if url in self._fetching_articles:
+                label = "transcript" if is_video_url(url) else "article"
+                return (
+                    f"# {name}\n\n"
+                    f"> ⟳ Fetching {label}…\n\n"
+                    f"---\n\n**URL:** {url}"
+                )
             if is_video_url(url):
                 from transcriber import yt_dlp_cache
                 from common.fetcher_utils import format_duration
@@ -252,7 +293,7 @@ class LinkBrowserApp(App):
                     return f"# {name}\n\n{text}"
                 return (
                     f"# {name}\n\n"
-                    f"> No cached article. Press **f** to fetch, **F** to force-refetch.\n\n"
+                    f"> No cached article. Press **f** to fetch.\n\n"
                     f"---\n\n**URL:** {url}"
                 )
 
@@ -266,10 +307,12 @@ class LinkBrowserApp(App):
         if mode == 2:
             from enricher import summary_cache
             summary = summary_cache.get_cached(url)
-            if summary:
+            if url in self._fetching_summaries:
+                md += f"---\n\n> ⟳ Generating summary…\n"
+            elif summary:
                 md += f"---\n\n### Summary\n\n{summary}\n"
             else:
-                md += f"---\n\n> No cached summary. Press **s** to generate, **S** to force-regenerate.\n"
+                md += f"---\n\n> No cached summary. Press **s** to generate.\n"
 
         return md
 
@@ -314,10 +357,14 @@ class LinkBrowserApp(App):
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         url = self._selected_url()
+        if action == "fetch_article":
+            return bool(url) and url not in self._article_keys
         if action == "refetch_article":
-            return bool(url and url in self._article_keys)
+            return bool(url) and url in self._article_keys
+        if action == "fetch_summary":
+            return bool(url) and url not in self._summary_keys
         if action == "refetch_summary":
-            return bool(url and url in self._summary_keys)
+            return bool(url) and url in self._summary_keys
         return True
 
     async def action_view_mode(self, mode: str) -> None:
@@ -326,34 +373,27 @@ class LinkBrowserApp(App):
         await self._refresh_detail()
 
     def action_fetch_article(self) -> None:
-        """Fetch article/transcript — skips if already cached."""
-        url = self._selected_url()
-        if not url:
-            return
-        from enricher import article_cache
-        if article_cache.get_cached(url) is not None:
-            self.notify("Article cached — press F to refetch", timeout=3)
-            return
-        self._do_fetch(url, force=False, content_type="article")
+        if url := self._selected_url():
+            self._do_fetch(url, force=False, content_type="article")
 
     def action_refetch_article(self) -> None:
-        """Force-refetch article/transcript, bypassing cache."""
         if url := self._selected_url():
             self._do_fetch(url, force=True, content_type="article")
 
     def action_fetch_summary(self) -> None:
-        """Generate LLM summary — skips if already cached."""
         url = self._selected_url()
         if not url:
             return
-        from enricher import summary_cache
-        if summary_cache.get_cached(url) is not None:
-            self.notify("Summary cached — press S to regenerate", timeout=3)
+        if url not in self._article_keys:
+            def on_confirm(confirmed: bool | None) -> None:
+                if confirmed:
+                    self._auto_summarize_after_fetch.add(url)
+                    self._do_fetch(url, force=False, content_type="article")
+            self.push_screen(_ConfirmFetchScreen(), on_confirm)
             return
         self._do_fetch(url, force=False, content_type="summary")
 
     def action_refetch_summary(self) -> None:
-        """Force-regenerate LLM summary, bypassing cache."""
         if url := self._selected_url():
             self._do_fetch(url, force=True, content_type="summary")
 
@@ -374,7 +414,12 @@ class LinkBrowserApp(App):
             return
         fetch_set.add(url)
         self._update_node_label(url)
-        verb = "Regenerating" if force else "Fetching"
+        if self._selected_link and self._selected_link.get("url") == url:
+            self.call_after_refresh(self._refresh_detail)
+        if content_type == "summary":
+            verb = "Regenerating" if force else "Generating"
+        else:
+            verb = "Refetching" if force else "Fetching"
         self.notify(f"{verb} {content_type}…", timeout=5)
         self._fetch_worker(url, force, content_type)
 
@@ -413,6 +458,10 @@ class LinkBrowserApp(App):
 
         if self._selected_link and self._selected_link.get("url") == url:
             await self._refresh_detail()
+
+        if result and content_type == "article" and url in self._auto_summarize_after_fetch:
+            self._auto_summarize_after_fetch.discard(url)
+            self._do_fetch(url, force=False, content_type="summary")
 
     def _make_leaf_label(self, url: str, name: str) -> Text:
         """Build a tree leaf label with cache and fetch-in-progress indicators."""
