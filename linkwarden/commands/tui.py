@@ -1,12 +1,12 @@
 """Interactive TUI browser for Linkwarden links."""
 
-import asyncio
 import json
 import webbrowser
 from collections import defaultdict
 from pathlib import Path
 
 from rich.text import Text
+from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -78,11 +78,14 @@ class LinkBrowserApp(App):
         Binding("q", "quit", "Quit"),
         Binding("escape", "escape_action", "Quit", show=False),
         Binding("o", "open_browser", "Open in browser"),
+        Binding("l", "open_reader", "Read in Linkwarden"),
         Binding("1", "view_mode('1')", "Short"),
         Binding("2", "view_mode('2')", "Long"),
         Binding("3", "view_mode('3')", "Reader"),
-        Binding("f", "fetch", "Fetch missing"),
-        Binding("r", "refetch", "Force regenerate"),
+        Binding("f", "fetch_article", "Fetch article"),
+        Binding("shift+f", "refetch_article", "Refetch article", key_display="F"),
+        Binding("s", "fetch_summary", "Fetch summary"),
+        Binding("shift+s", "refetch_summary", "Regen summary", key_display="S"),
         *[Binding(key, f"filter_tag('{tag}')", f"#{tag}") for key, tag in _QUICK_FILTERS],
     ]
 
@@ -100,7 +103,8 @@ class LinkBrowserApp(App):
         self._view_mode = 1
         self._active_tag_filter: str | None = None
         self._selected_link: dict | None = None
-        self._fetching = False
+        self._fetching_articles: set[str] = set()
+        self._fetching_summaries: set[str] = set()
 
     # ── Compose ───────────────────────────────────────────────────────────────
 
@@ -144,14 +148,7 @@ class LinkBrowserApp(App):
             for link in coll_links:
                 name = (link.get("name") or "").strip() or "Untitled"
                 url = link.get("url", "")
-                has_s = url in self._summary_keys
-                has_a = url in self._article_keys
-
-                label = Text()
-                label.append("●" if has_s else "○", style="green" if has_s else "dim")
-                label.append("▶" if has_a else "·", style="cyan" if has_a else "dim")
-                label.append(f"  {name}")
-                coll_node.add_leaf(label, data=link)
+                coll_node.add_leaf(self._make_leaf_label(url, name), data=link)
 
     def _rebuild_tree(self) -> None:
         """Clear and repopulate the tree using the active tag filter."""
@@ -174,6 +171,7 @@ class LinkBrowserApp(App):
         else:
             self._selected_link = data
             await self._refresh_detail()
+        self.refresh_bindings()
 
     # on_tree_node_selected intentionally not handled — Enter folds/unfolds
     # collections and shows the link preview without opening the browser.
@@ -216,7 +214,7 @@ class LinkBrowserApp(App):
                 return f"# {name}\n\n{text}"
             return (
                 f"# {name}\n\n"
-                f"> No cached article. Press **f** to fetch it.\n\n"
+                f"> No cached article. Press **f** to fetch, **F** to force-refetch.\n\n"
                 f"---\n\n**URL:** {url}"
             )
 
@@ -233,7 +231,7 @@ class LinkBrowserApp(App):
             if summary:
                 md += f"---\n\n### Summary\n\n{summary}\n"
             else:
-                md += f"---\n\n> No cached summary. Press **f** to generate it.\n"
+                md += f"---\n\n> No cached summary. Press **s** to generate, **S** to force-regenerate.\n"
 
         return md
 
@@ -242,6 +240,20 @@ class LinkBrowserApp(App):
     def action_open_browser(self) -> None:
         if self._selected_link and (url := self._selected_link.get("url", "")):
             webbrowser.open(url)
+
+    def action_open_reader(self) -> None:
+        if not self._selected_link:
+            return
+        link_id = self._selected_link.get("id")
+        if not link_id:
+            return
+        readable = self._selected_link.get("readable")
+        if readable == "unavailable":
+            self.notify("Readable version not available for this link", severity="warning", timeout=4)
+            return
+        from ..config import get_api_config
+        base_url, _ = get_api_config()
+        webbrowser.open(f"{base_url}/preserved/{link_id}?format=4")
 
     async def action_escape_action(self) -> None:
         """Clear active filter on first Escape; quit on second."""
@@ -262,81 +274,129 @@ class LinkBrowserApp(App):
                 self._selected_link = None
                 await self.query_one("#right-panel", Markdown).update("*No link selected.*")
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        url = self._selected_url()
+        if action == "refetch_article":
+            return bool(url and url in self._article_keys)
+        if action == "refetch_summary":
+            return bool(url and url in self._summary_keys)
+        return True
+
     async def action_view_mode(self, mode: str) -> None:
         self._view_mode = int(mode)
         self._set_subtitle()
         await self._refresh_detail()
 
-    async def action_fetch(self) -> None:
-        """Fetch missing data — skips silently if already cached (use r to force)."""
-        if not self._selected_link or self._fetching:
+    def action_fetch_article(self) -> None:
+        """Fetch article/transcript — skips if already cached."""
+        url = self._selected_url()
+        if not url:
             return
-        url = self._selected_link.get("url", "")
-        if not url or self._view_mode == 1:
-            if self._view_mode == 1:
-                self.notify("Switch to Long (2) or Reader (3) view first", severity="information")
+        from enricher import article_cache
+        if article_cache.get_cached(url) is not None:
+            self.notify("Article cached — press F to refetch", timeout=3)
             return
+        self._do_fetch(url, force=False, content_type="article")
 
-        # Pre-check: if already cached, don't re-run — that's what r is for
-        if self._view_mode == 2:
-            from enricher import summary_cache
-            if summary_cache.get_cached(url) is not None:
-                self.notify("Summary already cached — press r to regenerate", timeout=3)
-                return
-        else:
-            from enricher import article_cache
-            if article_cache.get_cached(url) is not None:
-                self.notify("Article already cached — press r to refetch", timeout=3)
-                return
+    def action_refetch_article(self) -> None:
+        """Force-refetch article/transcript, bypassing cache."""
+        if url := self._selected_url():
+            self._do_fetch(url, force=True, content_type="article")
 
-        await self._do_fetch(force=False)
+    def action_fetch_summary(self) -> None:
+        """Generate LLM summary — skips if already cached."""
+        url = self._selected_url()
+        if not url:
+            return
+        from enricher import summary_cache
+        if summary_cache.get_cached(url) is not None:
+            self.notify("Summary cached — press S to regenerate", timeout=3)
+            return
+        self._do_fetch(url, force=False, content_type="summary")
 
-    async def action_refetch(self) -> None:
-        """Force-regenerate — always bypasses cache."""
-        await self._do_fetch(force=True)
+    def action_refetch_summary(self) -> None:
+        """Force-regenerate LLM summary, bypassing cache."""
+        if url := self._selected_url():
+            self._do_fetch(url, force=True, content_type="summary")
 
     # ── Fetch helpers ─────────────────────────────────────────────────────────
 
-    async def _do_fetch(self, force: bool) -> None:
-        if not self._selected_link or self._fetching:
-            return
-        url = self._selected_link.get("url", "")
-        if not url:
-            return
+    def _selected_url(self) -> str | None:
+        """Return the URL of the selected link, or None if nothing is selected."""
+        return (self._selected_link or {}).get("url") or None
 
-        if self._view_mode == 1:
-            self.notify("Switch to Long (2) or Reader (3) view first", severity="information")
-            return
+    def _is_fetching(self, url: str) -> bool:
+        return url in self._fetching_articles or url in self._fetching_summaries
 
-        self._fetching = True
-        mode_label = "summary" if self._view_mode == 2 else "article"
+    def _do_fetch(self, url: str, force: bool, content_type: str) -> None:
+        """Start a background fetch — fire-and-forget, TUI stays responsive."""
+        fetch_set = self._fetching_articles if content_type == "article" else self._fetching_summaries
+        if url in fetch_set:
+            self.notify(f"Already fetching {content_type}…", timeout=3)
+            return
+        fetch_set.add(url)
+        self._update_node_label(url)
         verb = "Regenerating" if force else "Fetching"
-        self.notify(f"{verb} {mode_label}…", timeout=60)
+        self.notify(f"{verb} {content_type}…", timeout=5)
+        self._fetch_worker(url, force, content_type)
 
+    @work(thread=True)
+    def _fetch_worker(self, url: str, force: bool, content_type: str) -> None:
+        """Runs in a background thread — blocking fetch without freezing TUI."""
         try:
-            if self._view_mode == 2:
-                result = await asyncio.to_thread(self._run_fetch_summary, url, force)
+            if content_type == "summary":
+                result = self._run_fetch_summary(url, force)
             else:
-                result = await asyncio.to_thread(self._run_fetch_article, url, force)
+                result = self._run_fetch_article(url, force)
+        except Exception:
+            result = None
+        self.call_from_thread(self._on_fetch_done, url, content_type, result)
 
-            if result:
-                if self._view_mode == 2:
-                    self._summary_keys.add(url)
-                else:
-                    self._article_keys.add(url)
-                self.notify(
-                    f"{mode_label.capitalize()} ready ({len(result):,} chars)",
-                    severity="information",
-                    timeout=4,
-                )
+    async def _on_fetch_done(self, url: str, content_type: str, result: str | None) -> None:
+        """Called on the main thread when a background fetch completes."""
+        fetch_set = self._fetching_articles if content_type == "article" else self._fetching_summaries
+        fetch_set.discard(url)
+
+        if result:
+            if content_type == "summary":
+                self._summary_keys.add(url)
             else:
-                self.notify(f"Could not fetch {mode_label}", severity="warning", timeout=5)
-        except Exception as exc:
-            self.notify(f"Error: {exc}", severity="error", timeout=6)
-        finally:
-            self._fetching = False
+                self._article_keys.add(url)
+            self.notify(
+                f"{content_type.capitalize()} ready ({len(result):,} chars)",
+                severity="information",
+                timeout=4,
+            )
+        else:
+            self.notify(f"Could not fetch {content_type}", severity="warning", timeout=5)
 
-        await self._refresh_detail()
+        self._update_node_label(url)
+        self.refresh_bindings()
+
+        if self._selected_link and self._selected_link.get("url") == url:
+            await self._refresh_detail()
+
+    def _make_leaf_label(self, url: str, name: str) -> Text:
+        """Build a tree leaf label with cache and fetch-in-progress indicators."""
+        has_s = url in self._summary_keys
+        has_a = url in self._article_keys
+        is_fetching = self._is_fetching(url)
+        label = Text()
+        label.append("●" if has_s else "○", style="green" if has_s else "dim")
+        label.append("▶" if has_a else "·", style="cyan" if has_a else "dim")
+        label.append("⟳" if is_fetching else " ", style="yellow bold" if is_fetching else "")
+        label.append(f" {name}")
+        return label
+
+    def _update_node_label(self, url: str) -> None:
+        """Refresh the tree leaf label for the given URL."""
+        tree = self.query_one("#left-panel", Tree)
+        for coll_node in tree.root.children:
+            for leaf in coll_node.children:
+                if isinstance(leaf.data, dict) and leaf.data.get("url") == url:
+                    name = (leaf.data.get("name") or "").strip() or "Untitled"
+                    leaf.set_label(self._make_leaf_label(url, name))
+                    return
 
     @staticmethod
     def _run_fetch_summary(url: str, force: bool) -> str | None:
