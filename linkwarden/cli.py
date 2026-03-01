@@ -5,7 +5,7 @@ import sys
 
 from common.display import console
 from .api import set_verbose
-from .commands import add_link, enrich_all_links, list_links, remove_duplicates
+from .commands import add_link, enrich_all_links, launch_tui, list_links, remove_duplicates
 
 
 def _add_add_parser(subparsers):
@@ -33,6 +33,12 @@ def _add_remove_duplicates_parser(subparsers):
     p.add_argument("-v", "--verbose", action="count", default=0, help="-v for details, -vv for full metadata")
 
 
+def _add_tui_parser(subparsers):
+    """Add the 'tui' subcommand parser."""
+    p = subparsers.add_parser("tui", help="Browse links in an interactive TUI")
+    p.add_argument("--collection", type=int, default=None, help="Filter to specific collection ID")
+
+
 def _add_enrich_all_parser(subparsers):
     """Add the 'enrich-all' subcommand parser."""
     p = subparsers.add_parser("enrich-all", help="Enrich links (newsletter data + LLM)")
@@ -58,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_list_parser(subparsers)
     _add_remove_duplicates_parser(subparsers)
     _add_enrich_all_parser(subparsers)
+    _add_tui_parser(subparsers)
 
     return parser
 
@@ -71,7 +78,7 @@ def dispatch(args) -> int:
     if getattr(args, "verbose", 0):
         set_verbose(True)
 
-    if args.command not in ("add",) or (args.command == "add" and args.silent):
+    if args.command not in ("add", "tui") or (args.command == "add" and args.silent):
         console.print(f"[bold]linkwarden[/bold] {args.command}\n")
 
     if args.command == "add":
@@ -100,6 +107,9 @@ def dispatch(args) -> int:
             llm_only=args.llm_only,
             show_unmatched=args.show_unmatched,
         )
+        return 0
+    elif args.command == "tui":
+        launch_tui(collection_id=args.collection)
         return 0
     return 1
 
