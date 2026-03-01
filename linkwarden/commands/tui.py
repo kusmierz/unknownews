@@ -12,6 +12,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header, Markdown, Tree
 
+from common.fetcher_utils import is_video_url
 from ..collections_cache import get_collections
 from ..links import fetch_all_links, fetch_collection_links
 
@@ -37,6 +38,24 @@ def _load_cache_keys(cache_type: str) -> set[str]:
         return set()
     try:
         return set(json.loads(path.read_text(encoding="utf-8")).keys())
+    except Exception:
+        return set()
+
+
+def _load_video_transcript_keys() -> set[str]:
+    """Return URLs from yt_dlp cache that have an actual transcript stored."""
+    path = _CACHE_DIR / "yt_dlp.json"
+    if not path.exists():
+        return set()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        keys = set()
+        for url, entry in data.items():
+            # Entries with TTL are wrapped: {"timestamp": ..., "value": {...}}
+            value = entry.get("value", entry) if isinstance(entry, dict) else {}
+            if isinstance(value, dict) and value.get("_cached_transcript"):
+                keys.add(url)
+        return keys
     except Exception:
         return set()
 
@@ -208,15 +227,34 @@ class LinkBrowserApp(App):
         tags_line = "  ".join(f"`{t}`" for t in tags) if tags else "—"
 
         if mode == 3:
-            from enricher import article_cache
-            article = article_cache.get_cached(url)
-            if article and (text := article.get("text_content", "").strip()):
-                return f"# {name}\n\n{text}"
-            return (
-                f"# {name}\n\n"
-                f"> No cached article. Press **f** to fetch, **F** to force-refetch.\n\n"
-                f"---\n\n**URL:** {url}"
-            )
+            if is_video_url(url):
+                from transcriber import yt_dlp_cache
+                from common.fetcher_utils import format_duration
+                video = yt_dlp_cache.get_cached(url)
+                transcript = (video or {}).get("_cached_transcript") or ""
+                if transcript.strip():
+                    duration = video.get("duration")
+                    uploader = video.get("uploader") or video.get("channel") or ""
+                    parts = [p for p in [uploader, format_duration(duration) if duration else ""] if p]
+                    md = f"# {name}\n\n"
+                    if parts:
+                        md += f"*{' · '.join(parts)}*\n\n---\n\n"
+                    return md + transcript
+                return (
+                    f"# {name}\n\n"
+                    f"> No transcript cached. Press **f** to fetch.\n\n"
+                    f"---\n\n**URL:** {url}"
+                )
+            else:
+                from enricher import article_cache
+                article = article_cache.get_cached(url)
+                if article and (text := article.get("text_content", "").strip()):
+                    return f"# {name}\n\n{text}"
+                return (
+                    f"# {name}\n\n"
+                    f"> No cached article. Press **f** to fetch, **F** to force-refetch.\n\n"
+                    f"---\n\n**URL:** {url}"
+                )
 
         md = f"# {name}\n\n"
         md += f"> {url}\n\n"
@@ -381,9 +419,10 @@ class LinkBrowserApp(App):
         has_s = url in self._summary_keys
         has_a = url in self._article_keys
         is_fetching = self._is_fetching(url)
+        is_video = is_video_url(url)
         label = Text()
         label.append("●" if has_s else "○", style="green" if has_s else "dim")
-        label.append("▶" if has_a else "·", style="cyan" if has_a else "dim")
+        label.append("▶" if has_a else "·", style=("magenta" if has_a else "dim magenta") if is_video else ("cyan" if has_a else "dim"))
         label.append("⟳" if is_fetching else " ", style="yellow bold" if is_fetching else "")
         label.append(f" {name}")
         return label
@@ -412,7 +451,9 @@ class LinkBrowserApp(App):
         try:
             result = fetch_content(url, force=force)
             if result and not result.get("_skip_fallback"):
-                return result.get("text_content") or ""
+                if is_video_url(url):
+                    return result.get("transcript") or None
+                return result.get("text_content") or None
             return None
         except Exception:
             return None
@@ -452,7 +493,7 @@ def launch_tui(collection_id: int | None = None) -> None:
         return
 
     summary_keys = _load_cache_keys("summary")
-    article_keys = _load_cache_keys("article")
+    article_keys = _load_cache_keys("article") | _load_video_transcript_keys()
 
     app = LinkBrowserApp(links, summary_keys=summary_keys, article_keys=article_keys)
     app.run()
