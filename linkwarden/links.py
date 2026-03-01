@@ -40,6 +40,7 @@ def iter_all_links(silent: bool = False):
         count = 0
         for link in iter_collection_links(collection_id):
             link["_collection_name"] = collection_name
+            link["_collection_id"] = collection_id
             count += 1
             yield link
         if not silent:

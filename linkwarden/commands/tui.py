@@ -146,12 +146,14 @@ class LinkBrowserApp(App):
         links: list[dict],
         summary_keys: set[str],
         article_keys: set[str],
+        collections: list[dict] | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self._links = links
         self._summary_keys = summary_keys
         self._article_keys = article_keys
+        self._collections = collections
         self._view_mode = 1
         self._active_tag_filter: str | None = None
         self._selected_link: dict | None = None
@@ -167,7 +169,7 @@ class LinkBrowserApp(App):
         tree: Tree[dict | None] = Tree("Collections", id="left-panel")
         tree.show_root = False
         tree.root.expand()
-        self._populate_tree(tree.root, self._links)
+        self._populate_tree(tree.root, self._links, self._collections)
 
         with Horizontal():
             yield tree
@@ -184,30 +186,77 @@ class LinkBrowserApp(App):
         tag = self._active_tag_filter
         return [l for l in self._links if any(t.get("name") == tag for t in l.get("tags", []))]
 
-    def _populate_tree(self, root, links: list[dict]) -> None:
+    def _populate_tree(self, root, links: list[dict], collections: list[dict] | None = None) -> None:
         """Add collection/link nodes under root from the given link list."""
-        by_collection: dict[str, list[dict]] = defaultdict(list)
+        # Group links by collection ID (fall back to name string for flat mode)
+        by_coll_id: dict[int | str, list[dict]] = defaultdict(list)
         for link in links:
-            by_collection[link.get("_collection_name", "Unknown")].append(link)
+            key = link.get("_collection_id") or link.get("_collection_name", "Unknown")
+            by_coll_id[key].append(link)
 
-        for coll_name in sorted(by_collection.keys()):
-            coll_links = sorted(by_collection[coll_name], key=lambda x: x.get("id", 0))
+        if collections:
+            # Build parent → children lookup
+            children_of: dict[int | None, list[dict]] = defaultdict(list)
+            for c in collections:
+                children_of[c.get("parentId")].append(c)
 
-            header = Text()
-            header.append(f" {coll_name}", style="bold")
-            header.append(f"  ({len(coll_links)})", style="dim")
-            coll_node = root.add(header, data={"_collection": coll_name, "count": len(coll_links)}, expand=True)
+            def _link_count(coll_id: int) -> int:
+                total = len(by_coll_id.get(coll_id, []))
+                for child in children_of.get(coll_id, []):
+                    total += _link_count(child["id"])
+                return total
 
-            for link in coll_links:
-                name = (link.get("name") or "").strip() or "Untitled"
-                url = link.get("url", "")
-                coll_node.add_leaf(self._make_leaf_label(url, name), data=link)
+            def _add_node(parent_node, coll: dict) -> None:
+                coll_id = coll["id"]
+                coll_name = coll.get("name", f"Collection {coll_id}")
+                total = _link_count(coll_id)
+                if total == 0:
+                    return
+                subcollections = sorted(children_of.get(coll_id, []), key=lambda c: c.get("name", ""))
+                subcoll_info = [
+                    {"name": c.get("name", ""), "count": _link_count(c["id"])}
+                    for c in subcollections
+                    if _link_count(c["id"]) > 0
+                ]
+                header = Text()
+                header.append(f" {coll_name}", style="bold")
+                header.append(f"  ({total})", style="dim")
+                node_data = {
+                    "_collection": coll_name,
+                    "_collection_id": coll_id,
+                    "_description": (coll.get("description") or "").strip(),
+                    "_subcollections": subcoll_info,
+                    "count": total,
+                }
+                coll_node = parent_node.add(header, data=node_data, expand=True)
+                for link in sorted(by_coll_id.get(coll_id, []), key=lambda x: x.get("id", 0)):
+                    name = (link.get("name") or "").strip() or "Untitled"
+                    coll_node.add_leaf(self._make_leaf_label(link.get("url", ""), name), data=link)
+                for child in subcollections:
+                    _add_node(coll_node, child)
+
+            for coll in sorted(children_of.get(None, []), key=lambda c: c.get("name", "")):
+                _add_node(root, coll)
+        else:
+            # Flat mode — single collection or no hierarchy metadata
+            by_name: dict[str, list[dict]] = defaultdict(list)
+            for link in links:
+                by_name[link.get("_collection_name", "Unknown")].append(link)
+            for coll_name in sorted(by_name.keys()):
+                coll_links = sorted(by_name[coll_name], key=lambda x: x.get("id", 0))
+                header = Text()
+                header.append(f" {coll_name}", style="bold")
+                header.append(f"  ({len(coll_links)})", style="dim")
+                coll_node = root.add(header, data={"_collection": coll_name, "count": len(coll_links)}, expand=True)
+                for link in coll_links:
+                    name = (link.get("name") or "").strip() or "Untitled"
+                    coll_node.add_leaf(self._make_leaf_label(link.get("url", ""), name), data=link)
 
     def _rebuild_tree(self) -> None:
         """Clear and repopulate the tree using the active tag filter."""
         tree = self.query_one("#left-panel", Tree)
         tree.root.remove_children()
-        self._populate_tree(tree.root, self._filtered_links())
+        self._populate_tree(tree.root, self._filtered_links(), self._collections)
 
     def on_mount(self) -> None:
         self._set_subtitle()
@@ -234,11 +283,24 @@ class LinkBrowserApp(App):
     async def _show_collection(self, coll: dict) -> None:
         name = coll["_collection"]
         count = coll["count"]
+        description = coll.get("_description", "") or ""
+        subcollections = coll.get("_subcollections", [])
         filtered = self._active_tag_filter
-        md = f"## {name}\n\n**{count}** link{'s' if count != 1 else ''}"
+
+        md = f"## {name}\n\n"
+        if description:
+            md += f"{description}\n\n"
+        md += f"**{count}** link{'s' if count != 1 else ''}"
         if filtered:
             md += f"  ·  filtered by `#{filtered}`"
-        md += "\n\n*Select a link to view details.*"
+        md += "\n\n"
+        if subcollections:
+            md += "### Subcollections\n\n"
+            for sc in subcollections:
+                n = sc["count"]
+                md += f"- **{sc['name']}** ({n} link{'s' if n != 1 else ''})\n"
+            md += "\n"
+        md += "*Select a link to view details.*"
         panel = self.query_one("#right-panel", Markdown)
         await panel.update(md)
         panel.scroll_home(animate=False)
@@ -477,14 +539,22 @@ class LinkBrowserApp(App):
         return label
 
     def _update_node_label(self, url: str) -> None:
-        """Refresh the tree leaf label for the given URL."""
+        """Refresh the tree leaf label for the given URL (handles nested subcollections)."""
         tree = self.query_one("#left-panel", Tree)
-        for coll_node in tree.root.children:
-            for leaf in coll_node.children:
-                if isinstance(leaf.data, dict) and leaf.data.get("url") == url:
-                    name = (leaf.data.get("name") or "").strip() or "Untitled"
-                    leaf.set_label(self._make_leaf_label(url, name))
-                    return
+
+        def _find_and_update(node) -> bool:
+            for child in node.children:
+                if isinstance(child.data, dict):
+                    if "_collection" in child.data:
+                        if _find_and_update(child):
+                            return True
+                    elif child.data.get("url") == url:
+                        name = (child.data.get("name") or "").strip() or "Untitled"
+                        child.set_label(self._make_leaf_label(url, name))
+                        return True
+            return False
+
+        _find_and_update(tree.root)
 
     @staticmethod
     def _run_fetch_summary(url: str, force: bool) -> str | None:
@@ -527,15 +597,17 @@ def launch_tui(collection_id: int | None = None) -> None:
     with console.status("Fetching links…", spinner="dots"):
         if collection_id is not None:
             links = fetch_collection_links(collection_id)
-            collections = get_collections()
+            collections_meta = get_collections()
             coll_name = next(
-                (c.get("name", f"Collection {collection_id}") for c in collections if c["id"] == collection_id),
+                (c.get("name", f"Collection {collection_id}") for c in collections_meta if c["id"] == collection_id),
                 f"Collection {collection_id}",
             )
             for link in links:
                 link["_collection_name"] = coll_name
+            collections_meta = None  # single-collection mode: skip hierarchy
         else:
             links = fetch_all_links(silent=True)
+            collections_meta = get_collections()
 
     if not links:
         console.print("[dim]No links found.[/dim]")
@@ -544,5 +616,5 @@ def launch_tui(collection_id: int | None = None) -> None:
     summary_keys = _load_cache_keys("summary")
     article_keys = _load_cache_keys("article") | _load_video_transcript_keys()
 
-    app = LinkBrowserApp(links, summary_keys=summary_keys, article_keys=article_keys)
+    app = LinkBrowserApp(links, summary_keys=summary_keys, article_keys=article_keys, collections=collections_meta)
     app.run()
