@@ -115,13 +115,17 @@ Thin entry point (~15 lines). Imports `linkwarden.cli.main` and dispatches to co
   - `filter_query_params(query, keep_only)` - filters query parameters
 - `fetcher_utils.py` - Shared utilities and exceptions for content fetchers
   - `truncate_content(text, max_chars)` - intelligent sentence-boundary truncation
-  - `format_duration(seconds)` - converts seconds to human-readable duration
+  - `format_duration(seconds)` - converts seconds to human-readable duration (e.g. "1h 5m 30s")
+  - `format_duration_short(seconds)` - rounded short duration for titles (e.g. "54m", "~2.5h")
   - `is_video_url(url)` - URL-based video platform detection
+  - `check_url_head(url)` - HEAD request to check reachability and content type
+  - `is_document_content_type(content_type)` - detect document MIME type (returns "pdf"/"docx"/etc or None)
+  - `is_document_url(url)` - detect document type from URL extension (fallback to MIME check)
   - Exceptions: `ContentFetchError`, `RateLimitError`
 
 ### transcriber/ (video/audio transcription)
 - `video_fetcher.py` - `fetch_video_content(url)` - uses yt-dlp for metadata + youtube-transcript-api for transcripts (cached 7 days, ~10 KB per video)
-- `transcript.py` - `extract_transcript_from_info(info_dict)` - extracts transcript via youtube-transcript-api (languages: original → en → pl)
+- `transcript.py` - `extract_transcript_from_info(info_dict, verbose)` - extracts transcript via youtube-transcript-api (languages: original → en → pl)
 - `local.py` - stub for local video transcription (`NotImplementedError`)
 - `yt_dlp_cache.py` - Thin wrapper around unified cache for yt-dlp video info (7-day TTL)
 
@@ -139,6 +143,9 @@ Thin entry point (~15 lines). Imports `linkwarden.cli.main` and dispatches to co
   - `enrich_content(url, formatted_content, original_title, prompt_path, verbose, file_url)` - calls LLM and caches result
   - `load_prompt(prompt_path)` - loads prompt template file
   - `parse_json_response(text)` - parses JSON from LLM response, decodes HTML entities
+  - `is_title_empty(name, url)` - checks if title is empty, domain-only, or bogus (e.g. "Just a moment...")
+  - `has_llm_title(name)` - checks if title already has LLM bracket format "LLM title [Original]"
+  - `is_description_empty(description)` - checks if description is empty/whitespace
 - `summary_llm.py` - `summarize_url(url, verbose, force)` / `summarize_content(content_data, verbose)`
 - `title_utils.py` - `format_enriched_title(llm_title, original_title)` - bracket notation formatting
 - `cli.py` - CLI logic for `enricher.py` (no Linkwarden/newsletter deps)
@@ -162,9 +169,9 @@ Thin entry point (~15 lines). Imports `linkwarden.cli.main` and dispatches to co
   - `build_newsletter_tags(nl_data)` - returns `["unknow", date]` from newsletter data
 - `lw_content.py` - `fetch_linkwarden_content(link)` - fetches content using Linkwarden link dict as fallback
 - `lw_enricher.py` - Linkwarden-aware enrichment wrapper
-  - `enrich_link(url, prompt_path, verbose, link, status)` - wraps `enricher.enrich_url()` with Linkwarden fallback
+  - `enrich_link(url, prompt_path, verbose, link, status, extra_context)` - wraps `enricher.enrich_url()` with Linkwarden fallback
   - `needs_enrichment(link, force)` - checks which fields need enrichment (Linkwarden tag format)
-  - Re-exports: `is_title_empty`, `has_llm_title`, `is_description_empty`, `RateLimitError`
+  - Re-exports: `is_title_empty`, `has_llm_title`, `is_description_empty`, `enrich_content`, `RateLimitError`
 - `cli.py` - `build_parser()` / `dispatch(args)` / `main()` - argparse setup extracted from linkwarden.py
 
 **Commands** (in `linkwarden/commands/`) - all self-sustainable, read credentials from environment:

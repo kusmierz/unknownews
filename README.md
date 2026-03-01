@@ -132,13 +132,13 @@ OPENAI_MODEL_TIER=flex             # optional, service tier (e.g. flex)
 ### Commands
 
 ```bash
-# Fetch and display content for a URL
-python linkwarden.py fetch <url>                  # render as markdown
-python linkwarden.py fetch <url> --raw            # raw text only
-python linkwarden.py fetch <url> --force          # bypass cache, re-fetch
-python linkwarden.py fetch <url> --enrich         # show LLM enrichment data
-python linkwarden.py fetch <url> --summary        # generate LLM summary
-python linkwarden.py fetch <url> --json           # output as JSON
+# Fetch and display content for a URL (standalone, no Linkwarden needed)
+python enricher.py <url>                          # render as markdown
+python enricher.py <url> --raw                    # raw text only
+python enricher.py <url> --force                  # bypass cache, re-fetch
+python enricher.py <url> --enrich                 # show LLM enrichment data
+python enricher.py <url> --summary                # generate LLM summary
+python enricher.py <url> --json                   # output as JSON
 
 # Add a URL to Linkwarden with enrichment
 python linkwarden.py add <url>
@@ -151,23 +151,23 @@ python linkwarden.py list                         # all collections
 python linkwarden.py list --collection 14         # specific collection
 
 # Enrich links (newsletter data + LLM)
-python linkwarden.py enrich                       # enrich all collections
-python linkwarden.py enrich --newsletter-only     # newsletter data only (no LLM)
-python linkwarden.py enrich --llm-only            # LLM only (no newsletter matching)
-python linkwarden.py enrich --dry-run             # preview (caches results)
-python linkwarden.py enrich --force               # regenerate all fields
-python linkwarden.py enrich --collection 14       # specific collection
-python linkwarden.py enrich --limit 5             # limit processed links
-python linkwarden.py enrich --show-unmatched      # show URLs not in newsletter
+python linkwarden.py enrich-all                   # enrich all collections
+python linkwarden.py enrich-all --newsletter-only # newsletter data only (no LLM)
+python linkwarden.py enrich-all --llm-only        # LLM only (no newsletter matching)
+python linkwarden.py enrich-all --dry-run         # preview (caches results)
+python linkwarden.py enrich-all --force           # regenerate all fields
+python linkwarden.py enrich-all --collection 14   # specific collection
+python linkwarden.py enrich-all --limit 5         # limit processed links
+python linkwarden.py enrich-all --show-unmatched  # show URLs not in newsletter
 
 # Remove duplicates
 python linkwarden.py remove-duplicates --dry-run  # preview deletions
 python linkwarden.py remove-duplicates            # delete duplicates
 ```
 
-### Fetch command
+### enricher.py (standalone fetch/enrich tool)
 
-Fetches and renders content for any URL — articles, videos, PDFs, and documents:
+Fetches and renders content for any URL — articles, videos, PDFs, and documents. No Linkwarden dependency.
 
 - **Rendering**: Defaults to markdown display with title and metadata; `--raw` for plain text
 - **Content types**: Articles (trafilatura + Playwright fallback), videos (yt-dlp + transcripts), documents (PDF/DOCX/PPTX via markitdown)
