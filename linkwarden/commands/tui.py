@@ -1,5 +1,6 @@
 """Interactive TUI browser for Linkwarden links."""
 
+import html
 import json
 import webbrowser
 from collections import defaultdict
@@ -134,6 +135,8 @@ class LinkBrowserApp(App):
         Binding("1", "view_mode('1')", "Short"),
         Binding("2", "view_mode('2')", "Long"),
         Binding("3", "view_mode('3')", "Reader"),
+        Binding("e", "enrich_link", "Enrich"),
+        Binding("E", "reenrich_link", "Re-enrich"),
         Binding("f", "fetch_article", "Fetch"),
         Binding("F", "refetch_article", "Refetch"),
         Binding("s", "fetch_summary", "Gen summary"),
@@ -146,6 +149,7 @@ class LinkBrowserApp(App):
         links: list[dict],
         summary_keys: set[str],
         article_keys: set[str],
+        enriched_keys: set[str] | None = None,
         collections: list[dict] | None = None,
         **kwargs,
     ):
@@ -153,6 +157,7 @@ class LinkBrowserApp(App):
         self._links = links
         self._summary_keys = summary_keys
         self._article_keys = article_keys
+        self._enriched_keys = enriched_keys or set()
         self._collections = collections
         self._view_mode = 1
         self._active_tag_filter: str | None = None
@@ -160,6 +165,7 @@ class LinkBrowserApp(App):
         self._fetching_articles: set[str] = set()
         self._fetching_summaries: set[str] = set()
         self._auto_summarize_after_fetch: set[str] = set()
+        self._enriching: set[str] = set()
 
     # ── Compose ───────────────────────────────────────────────────────────────
 
@@ -419,6 +425,10 @@ class LinkBrowserApp(App):
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         url = self._selected_url()
+        if action == "enrich_link":
+            return bool(url) and url not in self._enriched_keys
+        if action == "reenrich_link":
+            return bool(url) and url in self._enriched_keys
         if action == "fetch_article":
             return bool(url) and url not in self._article_keys
         if action == "refetch_article":
@@ -459,6 +469,14 @@ class LinkBrowserApp(App):
         if url := self._selected_url():
             self._do_fetch(url, force=True, content_type="summary")
 
+    def action_enrich_link(self) -> None:
+        if url := self._selected_url():
+            self._do_enrich(url, force=False)
+
+    def action_reenrich_link(self) -> None:
+        if url := self._selected_url():
+            self._do_enrich(url, force=True)
+
     # ── Fetch helpers ─────────────────────────────────────────────────────────
 
     def _selected_url(self) -> str | None:
@@ -466,7 +484,7 @@ class LinkBrowserApp(App):
         return (self._selected_link or {}).get("url") or None
 
     def _is_fetching(self, url: str) -> bool:
-        return url in self._fetching_articles or url in self._fetching_summaries
+        return url in self._fetching_articles or url in self._fetching_summaries or url in self._enriching
 
     def _do_fetch(self, url: str, force: bool, content_type: str) -> None:
         """Start a background fetch — fire-and-forget, TUI stays responsive."""
@@ -577,6 +595,121 @@ class LinkBrowserApp(App):
         except Exception:
             return None
 
+    # ── Enrich helpers ────────────────────────────────────────────────────────
+
+    def _do_enrich(self, url: str, force: bool) -> None:
+        """Start a background LLM enrichment — fire-and-forget, TUI stays responsive."""
+        if url in self._enriching:
+            self.notify("Already enriching…", timeout=3)
+            return
+        self._enriching.add(url)
+        self._update_node_label(url)
+        if self._selected_link and self._selected_link.get("url") == url:
+            self.call_after_refresh(self._refresh_detail)
+        verb = "Re-enriching" if force else "Enriching"
+        self.notify(f"{verb}…", timeout=5)
+        self._enrich_worker(url, force)
+
+    @work(thread=True)
+    def _enrich_worker(self, url: str, force: bool) -> None:
+        """Runs in a background thread — blocking LLM call without freezing TUI."""
+        from enricher import llm_cache
+        from ..lw_enricher import enrich_link, needs_enrichment, is_title_empty
+        from ..links import update_link
+        from common.url_utils import normalize_url
+
+        link_snapshot = dict(self._selected_link or {})
+        try:
+            if force:
+                llm_cache.remove_cached(url)
+            needs = needs_enrichment(link_snapshot, force=force)
+            result = enrich_link(url, link=link_snapshot or None)
+        except Exception:
+            self.call_from_thread(self._on_enrich_done, url, None)
+            return
+
+        if not result or result.get("_skipped"):
+            self.call_from_thread(self._on_enrich_done, url, None)
+            return
+
+        # Build changes (mirrors _prepare_llm logic from enrich_all)
+        link_name = link_snapshot.get("name", "Untitled")
+        link_url = link_snapshot.get("url", url)
+        existing_desc = link_snapshot.get("description", "") or ""
+        changes: dict = {}
+
+        normalized_url = normalize_url(link_url)
+        if normalized_url and normalized_url != link_url:
+            changes["url"] = normalized_url
+
+        if needs["title"] and result.get("title"):
+            llm_title = result["title"]
+            org_title = result.get("_original_title", "")
+            if is_title_empty(link_name, link_url):
+                changes["name"] = f"{llm_title} [{org_title}]" if org_title and org_title != llm_title else llm_title
+            elif llm_title != link_name:
+                changes["name"] = f"{llm_title} [{html.unescape(link_name)}]"
+        if needs["description"] and result.get("description"):
+            changes["description"] = result["description"]
+        if needs["tags"] and result.get("tags"):
+            changes["tags"] = result["tags"]
+
+        if not changes:
+            self.call_from_thread(self._on_enrich_done, url, None)
+            return
+
+        final_name = changes.get("name", link_name)
+        final_url = changes.get("url", link_url)
+        final_description = changes.get("description", existing_desc)
+        final_tags = changes.get("tags", [])
+
+        try:
+            update_link(link_snapshot, final_name, final_url, final_description, final_tags)
+        except Exception:
+            self.call_from_thread(self._on_enrich_done, url, None)
+            return
+
+        updated_fields = []
+        if "name" in changes:
+            updated_fields.append("title")
+        if "description" in changes:
+            updated_fields.append("description")
+        if "tags" in changes:
+            updated_fields.append(f"{len(changes['tags'])} tags")
+
+        self.call_from_thread(self._on_enrich_done, url, {
+            "name": final_name,
+            "url": final_url,
+            "description": final_description,
+            "tags_new": final_tags,
+            "updated_fields": updated_fields,
+        })
+
+    async def _on_enrich_done(self, url: str, result: dict | None) -> None:
+        """Called on the main thread when a background enrichment completes."""
+        self._enriching.discard(url)
+
+        if result:
+            self._enriched_keys.add(url)
+            if self._selected_link and self._selected_link.get("url") == url:
+                self._selected_link["name"] = result["name"]
+                self._selected_link["url"] = result["url"]
+                self._selected_link["description"] = result["description"]
+                existing_tag_names = {t.get("name", "") for t in self._selected_link.get("tags", [])}
+                for tag_name in result.get("tags_new", []):
+                    if tag_name not in existing_tag_names:
+                        self._selected_link.setdefault("tags", []).append({"name": tag_name})
+            fields = result.get("updated_fields", [])
+            msg = f"Enriched ({', '.join(fields)})" if fields else "Enriched"
+            self.notify(msg, severity="information", timeout=4)
+        else:
+            self.notify("Could not enrich link", severity="warning", timeout=5)
+
+        self._update_node_label(url)
+        self.refresh_bindings()
+        if self._selected_link and self._selected_link.get("url") == url:
+            await self._refresh_detail()
+
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _set_subtitle(self) -> None:
@@ -615,6 +748,7 @@ def launch_tui(collection_id: int | None = None) -> None:
 
     summary_keys = _load_cache_keys("summary")
     article_keys = _load_cache_keys("article") | _load_video_transcript_keys()
+    enriched_keys = _load_cache_keys("llm")
 
-    app = LinkBrowserApp(links, summary_keys=summary_keys, article_keys=article_keys, collections=collections_meta)
+    app = LinkBrowserApp(links, summary_keys=summary_keys, article_keys=article_keys, enriched_keys=enriched_keys, collections=collections_meta)
     app.run()
